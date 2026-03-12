@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Kroma Capital</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            background: radial-gradient(circle at center, #2a2a2c 0%, #0d0d0d 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e0e0e0;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 50px 40px;
+            background-color: rgba(25, 25, 25, 0.6);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .logo-wrapper { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .logo-line { width: 4px; height: 45px; background-color: #8c8c8c; border-radius: 2px; }
+        .logo-text { display: flex; flex-direction: column; align-items: flex-start; }
+        .logo-text .kroma { font-size: 2.2rem; font-weight: 700; color: #ffffff; letter-spacing: 6px; line-height: 1; }
+        .logo-text .capital { font-size: 0.9rem; font-weight: 300; color: #8c8c8c; letter-spacing: 4px; margin-top: 4px; }
+
+        .badge {
+            display: inline-block;
+            background-color: rgba(140, 140, 140, 0.1);
+            border: 1px solid rgba(140, 140, 140, 0.3);
+            color: #a0a0a0;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+
+        /* --- MENSAGEM DE ERRO --- */
+        .error-msg {
+            display: none;
+            background-color: rgba(255, 85, 85, 0.1);
+            border: 1px solid rgba(255, 85, 85, 0.35);
+            color: #ff7070;
+            font-size: 0.85rem;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .error-msg.visivel { display: block; }
+
+        .input-group { text-align: left; margin-bottom: 20px; }
+        .input-group label { display: block; font-size: 0.85rem; color: #8c8c8c; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .input-group input {
+            width: 100%; background-color: #1a1a1a; border: 1px solid #333; color: #ffffff;
+            padding: 15px; border-radius: 8px; font-size: 1rem; outline: none; transition: all 0.3s ease;
+        }
+        .input-group input:focus { border-color: #a0a0a0; background-color: #222; }
+
+        .btn-login {
+            width: 100%; padding: 16px; margin-top: 10px;
+            background-color: #e0e0e0; color: #121212;
+            border: none; border-radius: 8px; font-size: 1rem; font-weight: 700;
+            cursor: pointer; transition: all 0.3s ease;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .btn-login:hover { background-color: #ffffff; box-shadow: 0 0 15px rgba(255,255,255,0.1); }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%       { transform: translateX(-8px); }
+            40%       { transform: translateX(8px); }
+            60%       { transform: translateX(-5px); }
+            80%       { transform: translateX(5px); }
+        }
+        .shake { animation: shake 0.4s ease; }
+
+        .footer-links { margin-top: 25px; display: flex; flex-direction: column; gap: 15px; }
+        .footer-links a { color: #8c8c8c; text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+        .footer-links a:hover { color: #ffffff; text-decoration: underline; }
+        .security-note { font-size: 0.75rem; color: #555; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="login-container" id="login-card">
+
+    <div class="logo-wrapper">
+        <div class="logo-line"></div>
+        <div class="logo-text">
+            <span class="kroma">KROMA</span>
+            <span class="capital">CAPITAL</span>
+        </div>
+    </div>
+
+    <div class="badge">FX Management Suite</div>
+
+    <div class="error-msg" id="msg-erro">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Usuário ou senha incorretos. Tente novamente.
+    </div>
+
+    <form id="form-login">
+        <div class="input-group">
+            <label>Usuário</label>
+            <input type="text" id="campo-usuario" placeholder="Digite seu usuário" required autocomplete="username">
+        </div>
+        <div class="input-group">
+            <label>Senha</label>
+            <input type="password" id="campo-senha" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-login">
+            Acessar Minha Conta
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+    </form>
+
+    <div class="footer-links">
+        <a href="#">Esqueci minha senha</a>
+        <div class="security-note">Ambiente protegido com criptografia de ponta a ponta</div>
+    </div>
+
+</div>
+
+<script>
+    // ================================================
+    // CREDENCIAIS DE ACESSO — altere aqui se precisar
+    // ================================================
+    const CREDENCIAIS = [
+        { usuario: "gestor", senha: "kroma2026", expira: null },
+        { usuario: "admin",  senha: "admin123",  expira: null }
+    ];
+
+    document.getElementById('form-login').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const usuario = document.getElementById('campo-usuario').value.trim().toLowerCase();
+        const senha   = document.getElementById('campo-senha').value;
+        const msgErro = document.getElementById('msg-erro');
+        const hoje    = new Date().toISOString().split('T')[0];
+
+        const conta  = CREDENCIAIS.find(c => c.usuario === usuario && c.senha === senha);
+        const valido = conta && (conta.expira === null || conta.expira >= hoje);
+
+        if (valido) {
+            sessionStorage.setItem('kroma_autenticado', 'true');
+            sessionStorage.setItem('kroma_usuario', usuario);
+            window.location.href = 'index.html';
+        } else if (conta && conta.expira && conta.expira < hoje) {
+            msgErro.textContent = 'Acesso expirado. Entre em contato com o administrador.';
+            msgErro.style.display = 'block';
+            document.getElementById('campo-senha').value = '';
+        } else {
+            msgErro.textContent = 'Usuário ou senha incorretos.';
+            msgErro.style.display = 'block';
+            document.getElementById('campo-senha').value = '';
+            document.getElementById('campo-senha').focus();
+        }
+    });
+
+    // Se já está logado, vai direto ao dashboard
+    if (sessionStorage.getItem('kroma_autenticado') === 'true') {
+        window.location.href = 'index.html';
+    }
+</script>
+
+</body>
+</html>

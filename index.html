@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kroma Capital | FX Suite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════ TOP NAV ═══════════════ -->
+<nav class="top-nav">
+    <!-- Logo -->
+    <div class="nav-logo">
+        <div class="line"></div>
+        <div>
+            <div class="kroma">KROMA</div>
+            <div class="cap">CAPITAL</div>
+        </div>
+    </div>
+
+    <!-- Desktop links (visível só em 900px+) -->
+    <div class="nav-links">
+        <a href="#" class="active" data-page="fornecedor">Fornecedor</a>
+        <a href="#" data-page="clientes">Clientes</a>
+        <a href="#" data-page="lucro">Dashboard Lucro</a>
+        <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
+    </div>
+
+    <!-- Ticker único — visível sempre, CSS controla o que mostra dentro -->
+    <div class="live-ticker" id="nav-ticker" style="margin-left:auto;">
+        <div class="dot"></div>
+        <span class="label">USDT/BRL</span>
+        <span class="price" id="ticker-price">—</span>
+        <span class="change" id="ticker-change"></span>
+    </div>
+
+    <!-- User + logout — só desktop via CSS -->
+    <div class="nav-right-desktop">
+        <span class="nav-user">Olá, <strong id="nome-usuario">Gestor</strong></span>
+        <button class="btn-logout" onclick="logout()">Sair</button>
+    </div>
+
+    <!-- Hamburguer — só mobile -->
+    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+    </button>
+</nav>
+
+<!-- Drawer mobile -->
+<div class="nav-drawer" id="nav-drawer">
+    <a href="#" class="active" data-page="fornecedor">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Fornecedor
+    </a>
+    <a href="#" data-page="clientes">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Clientes
+    </a>
+    <a href="#" data-page="lucro">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Dashboard Lucro
+    </a>
+    <a href="#" data-page="cotacoes">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Cotações ao Vivo
+    </a>
+    <hr class="nav-drawer-sep">
+    <div class="nav-drawer-user">
+        <span>Olá, <strong id="nome-usuario-mobile">Gestor</strong></span>
+        <button class="btn-logout" onclick="logout()">Sair</button>
+    </div>
+</div>
+
+<!-- ═══════════════ MAIN ═══════════════════ -->
+<div class="main-content">
+
+    <!-- ─── PÁGINA 1: FORNECEDOR ──────────── -->
+    <section class="page-section active" id="page-fornecedor">
+
+        <div class="section-header">
+            <div>
+                <h1>Fornecedor</h1>
+                <p id="data-atual"></p>
+            </div>
+        </div>
+
+        <div class="cards-grid">
+            <div class="card">
+                <h3>Volume Comprado (Hoje)</h3>
+                <div class="value"><span id="card-vol-usdt">0,00</span> USDT</div>
+                <div class="subtitle">Investido: <span id="card-vol-brl">R$ 0,00</span></div>
+            </div>
+            <div class="card">
+                <h3>Fluxo Fornecedor (USDT)</h3>
+                <div class="value">Comprado: <span id="card-forn-comprado">0,00</span></div>
+                <div class="subtitle" style="color:#ff5555;">Pendente a receber: <span id="card-forn-pendente">0,00</span></div>
+            </div>
+            <div class="card">
+                <h3>Contas a Pagar (BRL)</h3>
+                <div class="value">Enviado: <span id="card-pagar-enviado">R$ 0,00</span></div>
+                <div class="subtitle" style="color:#ff5555;">Pendente a enviar: <span id="card-pagar-pendente">R$ 0,00</span></div>
+            </div>
+        </div>
+
+        <!-- Formulário Fornecedor -->
+        <div class="op-card">
+
+            <!-- Bloco 1: Compra -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                Compra
+            </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Valor Comprado (USDT)</label>
+                    <input type="text" placeholder="0,00" id="valor-comprado">
+                </div>
+                <div class="input-group">
+                    <label>Cotação de Compra (R$)</label>
+                    <input type="text" placeholder="0,00" id="cotacao">
+                </div>
+                <div class="input-group">
+                    <label>Total Automático (R$)</label>
+                    <input type="text" placeholder="0,00" id="total-automatico" disabled>
+                </div>
+            </div>
+
+            <div class="form-divider"></div>
+
+            <!-- Bloco 2: Pagamento -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                Pagamento
+            </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Valor Pago (R$)</label>
+                    <input type="text" placeholder="0,00" id="valor-pix">
+                </div>
+                <div class="input-group">
+                    <label>Referência</label>
+                    <input type="text" placeholder="Ex: TED Lote 01, Pix Ref. 22..." id="referencia-pix">
+                </div>
+            </div>
+
+            <div class="action-row" style="margin-top:24px;">
+                <button class="btn-primary" id="btn-registrar">Registrar Operação</button>
+                <button class="btn-danger"  id="btn-cancelar"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar</button>
+            </div>
+        </div>
+
+        <!-- Histórico Fornecedor -->
+        <div class="section-header" style="margin-top:40px;">
+            <h2>Histórico de Operações</h2>
+            <div class="filter-row" style="margin-bottom:0;">
+                <label>Filtrar:</label>
+                <input type="date" id="filtro-data">
+                <button class="btn-small del" id="btn-limpar-filtro" style="display:none;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                <button class="btn-secondary" id="btn-exportar-pdf" style="padding:8px 16px; font-size:.82rem;">Exportar PDF</button>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <div class="table-responsive" id="drag-fornecedor">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Hora</th><th>USDT Comprado</th>
+                        <th>Cotação</th><th>Total (R$)</th><th>Valor Pago</th>
+                        <th>Falta Receber</th><th>Ações</th>
+                    </tr></thead>
+                    <tbody id="tabela-historico">
+                        <tr><td colspan="8" class="empty-state">Nenhuma operação registrada ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ─── PÁGINA 2: CLIENTES ────────────── -->
+    <section class="page-section" id="page-clientes">
+
+        <div class="section-header">
+            <div><h1>Clientes</h1><p>Gerencie saldos, envios e histórico por cliente</p></div>
+        </div>
+
+        <!-- Cards resumo clientes -->
+        <div class="cards-grid">
+            <div class="card">
+                <h3>Total de Clientes Ativos</h3>
+                <div class="value"><span id="cli-total-clientes">0</span></div>
+                <div class="subtitle">cadastrados no sistema</div>
+            </div>
+            <div class="card">
+                <h3>Volume Vendido (USDT)</h3>
+                <div class="value"><span id="cli-vol-usdt">0,00</span> USDT</div>
+                <div class="subtitle">Recebido: <span id="cli-vol-brl">R$ 0,00</span></div>
+            </div>
+            <div class="card">
+                <h3>Saldo Total a Enviar</h3>
+                <div class="value" style="color:#ffc107;"><span id="cli-pendente-usdt">0,00</span> USDT</div>
+                <div class="subtitle" style="color:#ff5555;">Pendente de envio aos clientes</div>
+            </div>
+        </div>
+
+        <!-- Formulário novo cliente / nova operação -->
+        <div class="op-card">
+            <div class="tabs">
+                <button class="tab-btn active" id="tab-nova-op">Nova Operação</button>
+                <button class="tab-btn" id="tab-cadastro">Cadastrar Cliente</button>
+            </div>
+
+            <!-- Painel: Nova Operação Cliente -->
+            <div id="painel-nova-op">
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>Cliente</label>
+                        <select id="cli-select">
+                            <option value="">— Selecione o cliente —</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>USDT Vendido</label>
+                        <input type="text" placeholder="0,00" id="cli-usdt">
+                    </div>
+                    <div class="input-group">
+                        <label>Cotação de Venda (R$)</label>
+                        <input type="text" placeholder="0,00" id="cli-cotacao-venda">
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>Total a Receber do Cliente (R$)</label>
+                        <input type="text" placeholder="0,00" id="cli-total-brl" disabled>
+                    </div>
+                    <div class="input-group">
+                        <label>Valor Pago pelo Cliente (R$)</label>
+                        <input type="text" placeholder="0,00" id="cli-pago-brl">
+                    </div>
+                    <div class="input-group">
+                        <label>Status do Envio de USDT</label>
+                        <select id="cli-status-envio">
+                            <option value="pendente">Pendente</option>
+                            <option value="parcial">Parcial</option>
+                            <option value="enviado">Enviado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>Referência / Observação</label>
+                        <input type="text" placeholder="Ex: Lote 05 - Carteira XYZ" id="cli-ref">
+                    </div>
+                    <div class="input-group">
+                        <label>Saldo USDT do Cliente Conosco</label>
+                        <input type="text" placeholder="Calculado automaticamente" id="cli-saldo-display" disabled>
+                    </div>
+                </div>
+                <div class="action-row">
+                    <button class="btn-primary" id="btn-registrar-cliente">Registrar Venda</button>
+                    <button class="btn-danger"  id="btn-cancelar-cliente"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar</button>
+                </div>
+            </div>
+
+            <!-- Painel: Cadastro -->
+            <div id="painel-cadastro" style="display:none;">
+                <div class="form-grid">
+                    <div class="input-group">
+                        <label>Nome Completo</label>
+                        <input type="text" placeholder="Ex: João da Silva" id="cad-nome">
+                    </div>
+                    <div class="input-group">
+                        <label>Contato (WhatsApp / e-mail)</label>
+                        <input type="text" placeholder="Ex: (11) 9 9999-0000" id="cad-contato">
+                    </div>
+                    <div class="input-group">
+                        <label>Observação</label>
+                        <input type="text" placeholder="Ex: Cliente VIP" id="cad-obs">
+                    </div>
+                </div>
+                <div class="action-row">
+                    <button class="btn-primary" id="btn-cadastrar-cliente">Cadastrar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Histórico clientes -->
+        <div class="section-header" style="margin-top:40px;">
+            <h2>Histórico de Vendas a Clientes</h2>
+            <div class="filter-row" style="margin-bottom:0;">
+                <label>Cliente:</label>
+                <select id="filtro-cliente-hist" style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:7px 12px;border-radius:7px;font-size:.85rem;outline:none;">
+                    <option value="">Todos</option>
+                </select>
+                <label>Data:</label>
+                <input type="date" id="filtro-data-cli">
+            </div>
+        </div>
+
+        <div class="table-card">
+            <div class="table-responsive" id="drag-clientes">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Hora</th><th>Cliente</th>
+                        <th>USDT Vendido</th><th>Cotação Venda</th><th>Total (R$)</th>
+                        <th>Pago (R$)</th><th>Saldo USDT</th><th>Status Envio</th><th>Ações</th>
+                    </tr></thead>
+                    <tbody id="tabela-clientes">
+                        <tr><td colspan="10" class="empty-state">Nenhuma venda registrada ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ─── PÁGINA 3: DASHBOARD LUCRO ─────── -->
+    <section class="page-section" id="page-lucro">
+
+        <div class="section-header">
+            <div><h1>Dashboard de Lucro</h1><p>Spread entre compra (fornecedor) e venda (cliente)</p></div>
+            <div class="period-selector">
+                <button class="period-btn active" data-period="semana">Semanal</button>
+                <button class="period-btn" data-period="mes">Mensal</button>
+                <button class="period-btn" data-period="tudo">Tudo</button>
+            </div>
+        </div>
+
+        <!-- Cards KPI -->
+        <div class="lucro-cards">
+            <div class="lucro-card green">
+                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Lucro Total (Spread)</div>
+                <div class="lc-val" id="lc-lucro-total">R$ 0,00</div>
+                <div class="lc-sub">Diferença cot. compra vs venda</div>
+            </div>
+            <div class="lucro-card blue">
+                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Volume Negociado</div>
+                <div class="lc-val" id="lc-volume">0,00 USDT</div>
+                <div class="lc-sub">Total comprado e vendido</div>
+            </div>
+            <div class="lucro-card yellow">
+                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Spread Médio</div>
+                <div class="lc-val" id="lc-spread-medio">R$ 0,00</div>
+                <div class="lc-sub">Por USDT negociado</div>
+            </div>
+            <div class="lucro-card" style="border-color:rgba(224,224,224,.2);">
+                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>Operações</div>
+                <div class="lc-val" id="lc-qtd-ops" style="color:#e0e0e0;">0</div>
+                <div class="lc-sub">No período selecionado</div>
+            </div>
+        </div>
+
+        <!-- Gráfico -->
+        <div class="chart-card">
+            <h3>Lucro por Dia (R$)</h3>
+            <div class="chart-wrap">
+                <canvas id="grafico-lucro"></canvas>
+            </div>
+        </div>
+
+        <!-- Tabela detalhada spread -->
+        <div class="section-header" style="margin-top:8px;">
+            <h2>Detalhamento por Operação</h2>
+        </div>
+        <div class="table-card">
+            <div class="table-responsive">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Cliente</th><th>USDT</th>
+                        <th>Cot. Compra</th><th>Cot. Venda</th><th>Spread/USDT</th><th>Lucro (R$)</th>
+                    </tr></thead>
+                    <tbody id="tabela-lucro">
+                        <tr><td colspan="7" class="empty-state">Sem dados no período.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ─── PÁGINA 4: COTAÇÕES AO VIVO ────── -->
+    <section class="page-section" id="page-cotacoes">
+
+        <div class="section-header">
+            <div><h1>Cotações ao Vivo</h1><p>USDT/BRL — Dólar Comercial em tempo real</p></div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="dot" style="width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 1.8s infinite;"></div>
+                    <span style="font-size:.82rem;color:#a0a0a0;" id="ultimo-update">Atualizando...</span>
+                </div>
+                <!-- Botão compartilhar tela do cliente -->
+                <button class="btn-secondary" id="btn-abrir-share" style="display:flex;align-items:center;gap:8px;padding:9px 18px;font-size:.82rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    Compartilhar com Cliente
+                </button>
+            </div>
+        </div>
+
+        <!-- Hero cotação -->
+        <div class="cotacao-hero">
+            <div class="ch-label">USDT / BRL — Preço de Mercado</div>
+            <div class="ch-price" id="cot-preco-principal">Carregando...</div>
+            <div class="ch-change" id="cot-variacao"></div>
+            <div class="ch-meta">
+                <span>Mínima 24h: <strong id="cot-min">—</strong></span>
+                <span>Máxima 24h: <strong id="cot-max">—</strong></span>
+                <span>Atualização: <strong>15s</strong></span>
+                <span>Fonte: <strong id="cot-fonte">—</strong></span>
+            </div>
+        </div>
+
+        <!-- Calculadora de Spread — simplificada -->
+        <div class="spread-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
+                <h3 style="margin:0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+                    Calculadora de Spread
+                </h3>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;align-items:end;">
+
+                <!-- Cotação de mercado (readonly) -->
+                <div class="spread-item">
+                    <div class="si-label">Cotação de Mercado (R$)</div>
+                    <div class="si-val blue" id="calc-mercado" style="font-size:1.5rem;">—</div>
+                </div>
+
+                <!-- Input spread % -->
+                <div class="spread-item">
+                    <div class="si-label">Spread (%)</div>
+                    <input type="text" id="calc-spread-input" placeholder="Ex: 0,60"
+                        style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:12px 14px;border-radius:8px;font-size:1.1rem;font-weight:600;outline:none;width:100%;transition:.2s;"
+                        oninput="calcularSpread()">
+                </div>
+
+                <!-- Preço final com botão copiar -->
+                <div class="spread-item">
+                    <div class="si-label">Preço Final com Spread (R$)</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div id="calc-preco-final" style="font-size:1.5rem;font-weight:700;color:#ffffff;flex:1;">—</div>
+                        <button id="btn-copiar-cotacao" title="Copiar cotação"
+                            style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:10px 12px;border-radius:8px;cursor:pointer;transition:.2s;flex-shrink:0;"
+                            onclick="copiarCotacao()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Spread em R$ por USDT -->
+                <div class="spread-item">
+                    <div class="si-label">Spread por USDT (R$)</div>
+                    <div class="si-val" style="color:#ffc107;font-size:1.3rem;" id="calc-spread-rs">—</div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Gráfico de Velas — USDT/BRL histórico diário -->
+        <div class="chart-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+                <h3 style="margin:0;">Histórico USDT/BRL — Velas Diárias (30 dias)</h3>
+                <span style="font-size:.78rem;color:#555;" id="grafico-fonte">Fonte: AwesomeAPI · Dólar Comercial</span>
+            </div>
+            <div class="chart-wrap" style="height:340px;">
+                <canvas id="grafico-cotacao"></canvas>
+            </div>
+        </div>
+
+        <!-- Modal compartilhar -->
+        <div id="modal-share" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;">
+            <div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:36px;max-width:500px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-size:1.1rem;color:#fff;">Compartilhar Tela de Câmbio</h3>
+                    <button onclick="fecharModal()" style="background:none;border:none;color:#666;font-size:1.2rem;cursor:pointer;padding:4px 8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <p style="color:#a0a0a0;font-size:.88rem;margin-bottom:20px;line-height:1.6;">
+                    Envie este link para o cliente acompanhar a cotação ao vivo. Ele poderá ver o preço em tempo real, tirar print e enviar para travar o valor desejado.
+                </p>
+                <div style="background:#111;border:1px solid #2e2e2e;border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:20px;">
+                    <span id="link-cliente-url" style="font-size:.82rem;color:#a0a0a0;word-break:break-all;flex:1;">cotacao-cliente.html</span>
+                    <button onclick="copiarLink()" style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;font-size:.8rem;font-weight:600;transition:.2s;">
+                        Copiar Link
+                    </button>
+                </div>
+                <button onclick="abrirPaginaCliente()" class="btn-primary" style="width:100%;padding:13px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Abrir Prévia da Tela do Cliente
+                </button>
+            </div>
+        </div>
+
+    </section>
+
+</div><!-- /main-content -->
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

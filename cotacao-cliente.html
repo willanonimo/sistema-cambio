@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cotação ao Vivo | Kroma Capital</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:      #0d0d0d;
+            --card:    rgba(25,25,25,0.8);
+            --border:  #222;
+            --silver:  #a0a0a0;
+            --green:   #4CAF50;
+            --red:     #ff5555;
+            --yellow:  #ffc107;
+            --blue:    #2196F3;
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',sans-serif; }
+
+        body {
+            background: radial-gradient(ellipse at top, #1a1b1c 0%, #080808 70%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── HEADER ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,.5);
+            backdrop-filter: blur(12px);
+            position: sticky; top:0; z-index:10;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 12px;
+        }
+        .logo-bar { width:3px; height:30px; background:#666; border-radius:2px; }
+        .logo-kroma  { font-size:1.1rem; font-weight:700; letter-spacing:5px; color:#fff; }
+        .logo-cap    { font-size:.6rem; font-weight:300; letter-spacing:3px; color:#666; }
+
+        .live-dot {
+            display: flex; align-items:center; gap:7px;
+            font-size:.78rem; color:#666;
+        }
+        .dot {
+            width:7px; height:7px; border-radius:50%;
+            background: var(--green); animation: pulse 1.8s infinite;
+        }
+        @keyframes pulse {
+            0%,100%{ opacity:1; transform:scale(1); }
+            50%    { opacity:.4; transform:scale(1.4); }
+        }
+
+        /* ── MAIN ── */
+        main {
+            flex: 1;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
+            width: 100%;
+        }
+
+        /* ── PRICE HERO ── */
+        .price-card {
+            background: var(--card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px 32px;
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .price-card::before {
+            content: '';
+            position: absolute; inset:0;
+            background: radial-gradient(circle at 50% 0%, rgba(255,255,255,.03) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .pair-label {
+            font-size: .7rem; font-weight:700; letter-spacing:3px;
+            color: #555; text-transform:uppercase; margin-bottom:14px;
+        }
+
+        .price-main {
+            font-size: 3.8rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -2px;
+            line-height: 1;
+            margin-bottom: 10px;
+            transition: color .3s;
+        }
+        .price-main.flash-up   { color: var(--green); }
+        .price-main.flash-down { color: var(--red); }
+
+        .price-change {
+            font-size: .95rem; font-weight:600; margin-bottom:28px;
+        }
+        .price-change.up   { color: var(--green); }
+        .price-change.down { color: var(--red); }
+
+        .price-meta {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px; border-top: 1px solid var(--border); padding-top:20px;
+        }
+        .meta-item { display:flex; flex-direction:column; gap:4px; }
+        .meta-label { font-size:.68rem; color:#555; letter-spacing:1px; text-transform:uppercase; }
+        .meta-val   { font-size:.95rem; font-weight:600; color:#ccc; }
+
+        /* ── SPREAD CARD ── */
+        .spread-card {
+            background: var(--card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+        }
+        .spread-title {
+            font-size:.72rem; font-weight:700; letter-spacing:2px;
+            color:#555; text-transform:uppercase; margin-bottom:20px;
+        }
+        .spread-row {
+            display: flex; justify-content:space-between; align-items:center;
+            padding: 12px 0; border-bottom:1px solid rgba(255,255,255,.04);
+        }
+        .spread-row:last-child { border-bottom:none; }
+        .spread-row .sr-label { font-size:.85rem; color:#666; }
+        .spread-row .sr-val   { font-size:1rem; font-weight:600; color:#e0e0e0; }
+        .spread-row .sr-val.highlight { font-size:1.4rem; color:#fff; font-weight:700; }
+
+        /* Botão copiar */
+        .copy-row {
+            display: flex; align-items:center; gap:12px;
+        }
+        .btn-copy {
+            display: flex; align-items:center; gap:7px;
+            background: rgba(255,255,255,.06);
+            border: 1px solid #2e2e2e;
+            color: #a0a0a0; padding: 9px 16px;
+            border-radius: 8px; cursor:pointer;
+            font-size:.82rem; font-weight:600;
+            transition:.2s; white-space:nowrap;
+        }
+        .btn-copy:hover { background:rgba(255,255,255,.1); color:#fff; }
+        .btn-copy.copied { border-color:var(--green); color:var(--green); }
+
+        /* ── TIMESTAMP ── */
+        .timestamp-card {
+            background: rgba(255,255,255,.02);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 20px;
+            display: flex; align-items:center; justify-content:space-between;
+            margin-bottom: 20px; font-size:.78rem; color:#444;
+        }
+        .timestamp-card strong { color:#666; }
+
+        /* ── INSTRUÇÃO ── */
+        .instrucao {
+            text-align:center;
+            font-size:.78rem; color:#444; line-height:1.7;
+            padding: 0 10px;
+        }
+
+        /* ── FOOTER ── */
+        footer {
+            text-align:center; padding:24px;
+            font-size:.7rem; color:#333;
+            border-top:1px solid var(--border);
+        }
+
+        /* ── RESPONSIVO ── */
+        @media(max-width:480px) {
+            header { padding:16px 20px; }
+            main   { padding:24px 16px 48px; }
+            .price-main { font-size:2.8rem; }
+            .price-meta { grid-template-columns:1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">
+        <div class="logo-bar"></div>
+        <div>
+            <div class="logo-kroma">KROMA</div>
+            <div class="logo-cap">CAPITAL</div>
+        </div>
+    </div>
+    <div class="live-dot">
+        <div class="dot"></div>
+        <span id="hdr-update">Conectando...</span>
+    </div>
+</header>
+
+<main>
+
+    <!-- Preço principal -->
+    <div class="price-card">
+        <div class="pair-label">USDT / BRL &nbsp;·&nbsp; Preço ao Vivo</div>
+        <div class="price-main" id="cli-preco">—</div>
+        <div class="price-change" id="cli-variacao"></div>
+        <div class="price-meta">
+            <div class="meta-item">
+                <span class="meta-label">Mínima 24h</span>
+                <span class="meta-val" id="cli-min">—</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Máxima 24h</span>
+                <span class="meta-val" id="cli-max">—</span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Volume 24h</span>
+                <span class="meta-val" id="cli-vol">—</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cotação com spread -->
+    <div class="spread-card" id="spread-block" style="display:none;">
+        <div class="spread-title">Taxa de Câmbio</div>
+
+        <div class="spread-row">
+            <span class="sr-label">Cotação de Mercado</span>
+            <span class="sr-val" id="cli-cot-mercado">—</span>
+        </div>
+        <div class="spread-row">
+            <span class="sr-label">Taxa com Spread</span>
+            <div class="copy-row">
+                <span class="sr-val highlight" id="cli-cot-spread">—</span>
+                <button class="btn-copy" id="btn-cli-copiar" onclick="copiarCli()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copiar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timestamp -->
+    <div class="timestamp-card">
+        <span>Captura do preço:</span>
+        <strong id="cli-timestamp">—</strong>
+    </div>
+
+    <!-- Instrução -->
+    <p class="instrucao">
+        Tire um print desta tela com o preço exibido e envie para travar a cotação.<br>
+        O preço é atualizado automaticamente a cada 15 segundos.
+    </p>
+
+</main>
+
+<footer>
+    Kroma Capital &nbsp;·&nbsp; FX Management Suite &nbsp;·&nbsp; Dados via Binance API
+</footer>
+
+<script>
+    let precoAtual = 0;
+    let precoAnterior = 0;
+
+    async function atualizar() {
+        try {
+            const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+            const d = await r.json();
+
+            precoAnterior = precoAtual;
+            precoAtual    = parseFloat(d.lastPrice);
+            const min24   = parseFloat(d.lowPrice);
+            const max24   = parseFloat(d.highPrice);
+            const vol24   = parseFloat(d.volume);
+            const change  = parseFloat(d.priceChangePercent);
+
+            // Spread vindo da URL (?spread=0.6)
+            const params   = new URLSearchParams(window.location.search);
+            const spreadPct= parseFloat(params.get('spread') || '0') || 0;
+            const precoFinal = precoAtual * (1 + spreadPct / 100);
+
+            // Formatar
+            const fmt = n => n.toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4});
+            const fmtK = n => n.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
+
+            // Preço principal com flash de cor
+            const elPreco = document.getElementById('cli-preco');
+            elPreco.textContent = 'R$ ' + fmt(precoAtual);
+            if (precoAnterior > 0) {
+                elPreco.classList.remove('flash-up','flash-down');
+                void elPreco.offsetWidth;
+                elPreco.classList.add(precoAtual >= precoAnterior ? 'flash-up' : 'flash-down');
+                setTimeout(() => elPreco.classList.remove('flash-up','flash-down'), 800);
+            }
+
+            // Variação
+            const elVar = document.getElementById('cli-variacao');
+            elVar.textContent = (change>=0?'▲ +':'▽ ') + change.toFixed(2) + '% nas últimas 24h';
+            elVar.className   = 'price-change ' + (change>=0?'up':'down');
+
+            document.getElementById('cli-min').textContent = 'R$ ' + fmt(min24);
+            document.getElementById('cli-max').textContent = 'R$ ' + fmt(max24);
+            document.getElementById('cli-vol').textContent = fmtK(vol24) + ' USDT';
+
+            // Bloco spread
+            if (spreadPct > 0) {
+                document.getElementById('spread-block').style.display = 'block';
+                document.getElementById('cli-cot-mercado').textContent = 'R$ ' + fmt(precoAtual);
+                document.getElementById('cli-cot-spread').textContent  = 'R$ ' + fmt(precoFinal);
+            }
+
+            // Timestamp
+            const agora = new Date().toLocaleString('pt-BR');
+            document.getElementById('cli-timestamp').textContent = agora;
+            document.getElementById('hdr-update').textContent    = 'Ao vivo · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+        } catch(e) {
+            document.getElementById('cli-preco').textContent = 'Indisponível';
+        }
+    }
+
+    function copiarCli() {
+        const el  = document.getElementById('cli-cot-spread');
+        const btn = document.getElementById('btn-cli-copiar');
+        const txt = el.textContent;
+        if (!txt || txt === '—') return;
+        navigator.clipboard.writeText(txt).then(() => {
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copiado!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar';
+                btn.classList.remove('copied');
+            }, 2500);
+        });
+    }
+
+    atualizar();
+    setInterval(atualizar, 15000);
+</script>
+
+</body>
+</html>
