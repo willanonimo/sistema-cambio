@@ -1116,59 +1116,67 @@ function iniciarCotacoes() {
     setInterval(buscarVelas,  300000);  // velas a cada 5 min
 }
 
-// ── Cotação USDT/BRL — mesma fórmula do TradingView ────────────
-// Fonte 1: Coinbase (USDT/USD) × Frankfurter (USD/BRL) — tempo real
-// Fonte 2: Binance USDTBRL — fallback
+// ── Cotação USDT/BRL ───────────────────────────────────────────
+// Tenta 3 fontes em sequência até conseguir um valor válido:
+// 1. AwesomeAPI  USDT-BRL  (mercado paralelo, tem CORS, sem chave)
+// 2. AwesomeAPI  USD-BRL   (dólar comercial, multiplica por USDT/USD ~1)
+// 3. Binance     USDTBRL   (às vezes retorna invertido < 1, corrigido)
 async function buscarCotacao() {
+
+    // ── Tentativa 1: AwesomeAPI USDT-BRL ─────────────────────
     try {
-        // Busca USDT/USD na Coinbase (gratuita, sem chave, tempo real)
-        // e USD/BRL no Frankfurter (Banco Central Europeu — tempo real)
-        const [rCoinbase, rFx] = await Promise.all([
-            fetch('https://api.coinbase.com/v2/prices/USDT-USD/spot'),
-            fetch('https://api.frankfurter.app/latest?from=USD&to=BRL'),
-        ]);
-
-        const dCoinbase = await rCoinbase.json();
-        const dFx       = await rFx.json();
-
-        const usdtUsd = parseFloat(dCoinbase.data.amount);   // USDT em dólar
-        const usdBrl  = parseFloat(dFx.rates.BRL);           // dólar em real
-
-        if (!usdtUsd || !usdBrl) throw new Error('Dados inválidos');
-
-        cotacaoAtual = usdtUsd * usdBrl;
-
-        // Variação 24h via Binance (só para o % — não afeta o preço)
-        let pctChg = 0, lo = cotacaoAtual * 0.998, hi = cotacaoAtual * 1.002;
-        try {
-            const rb = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-            const db = await rb.json();
-            pctChg = parseFloat(db.priceChangePercent) || 0;
-            const binLo = parseFloat(db.lowPrice);
-            const binHi = parseFloat(db.highPrice);
-            lo = binLo > 1 ? binLo : lo;
-            hi = binHi > 1 ? binHi : hi;
-        } catch(_) {}
-
-        atualizarHeroCotacao(cotacaoAtual, lo, hi, pctChg, 'Coinbase × Frankfurter');
-
-    } catch(e) {
-        // Fallback: Binance USDTBRL direto
-        try {
-            const rb = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-            const db = await rb.json();
-            let preco = parseFloat(db.lastPrice);
-            if (preco < 1) preco = 1 / preco;
-            cotacaoAtual = preco;
-            const pct = parseFloat(db.priceChangePercent) || 0;
-            const lo  = parseFloat(db.lowPrice)  > 1 ? parseFloat(db.lowPrice)  : preco * 0.998;
-            const hi  = parseFloat(db.highPrice) > 1 ? parseFloat(db.highPrice) : preco * 1.002;
-            atualizarHeroCotacao(preco, lo, hi, pct, 'Binance USDT/BRL');
-        } catch(e2) {
-            document.getElementById('cot-preco-principal').textContent = 'Indisponível';
-            document.getElementById('ultimo-update').textContent = 'Erro ao obter cotação';
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache: 'no-store' });
+        if (!r.ok) throw new Error('status ' + r.status);
+        const d = await r.json();
+        const bid  = parseFloat(d.USDTBRL.bid);
+        const high = parseFloat(d.USDTBRL.high);
+        const low  = parseFloat(d.USDTBRL.low);
+        const pct  = parseFloat(d.USDTBRL.pctChange) || 0;
+        if (bid > 1) {
+            cotacaoAtual = bid;
+            atualizarHeroCotacao(bid, low, high, pct, 'AwesomeAPI · USDT/BRL');
+            return;
         }
-    }
+    } catch(_) {}
+
+    // ── Tentativa 2: AwesomeAPI USD-BRL (dólar comercial) ────
+    try {
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
+        if (!r.ok) throw new Error('status ' + r.status);
+        const d = await r.json();
+        const bid  = parseFloat(d.USDBRL.bid);
+        const high = parseFloat(d.USDBRL.high);
+        const low  = parseFloat(d.USDBRL.low);
+        const pct  = parseFloat(d.USDBRL.pctChange) || 0;
+        if (bid > 1) {
+            cotacaoAtual = bid;
+            atualizarHeroCotacao(bid, low, high, pct, 'AwesomeAPI · USD/BRL');
+            return;
+        }
+    } catch(_) {}
+
+    // ── Tentativa 3: Binance USDTBRL ─────────────────────────
+    try {
+        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+        if (!r.ok) throw new Error('status ' + r.status);
+        const d = await r.json();
+        let preco = parseFloat(d.lastPrice);
+        if (preco < 1) preco = 1 / preco;
+        const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
+        const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
+        const pct = parseFloat(d.priceChangePercent) || 0;
+        if (preco > 1) {
+            cotacaoAtual = preco;
+            atualizarHeroCotacao(preco, lo, hi, pct, 'Binance · USDT/BRL');
+            return;
+        }
+    } catch(_) {}
+
+    // ── Todas falharam ────────────────────────────────────────
+    const el = document.getElementById('cot-preco-principal');
+    if (el) el.textContent = 'Indisponível';
+    const elU = document.getElementById('ultimo-update');
+    if (elU) elU.textContent = 'Erro ao obter cotação';
 }
 
 function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
