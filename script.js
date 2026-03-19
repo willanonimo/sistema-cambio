@@ -1100,7 +1100,7 @@ function renderLucro() {
 }
 
 // ============================================================
-// MÓDULO D — COTAÇÕES AO VIVO (BLINDADO E OTIMIZADO)
+// MÓDULO D — COTAÇÕES AO VIVO (COM PAR SINTÉTICO AXONE)
 // ============================================================
 let cotacaoAtual      = 0;
 let cotacoesIniciadas = false;
@@ -1112,11 +1112,11 @@ function iniciarCotacoes() {
     iniciarWidgetTV();
     buscarCotacaoSimples();
     
-    // Atualiza a cotação a cada 10 segundos automaticamente
+    // Atualiza a cada 10 segundos
     setInterval(buscarCotacaoSimples, 10000);
 }
 
-// ── 1. Widget TradingView (Gráfico Oficial Institucional) ────
+// ── 1. Widget TradingView (Com o seu Ticker Exclusivo) ──────
 function iniciarWidgetTV() {
     const chartContainer = document.getElementById('tv-chart-container');
     if (!chartContainer || chartContainer.dataset.loaded) return;
@@ -1128,14 +1128,15 @@ function iniciarWidgetTV() {
         if (typeof TradingView === 'undefined') return;
         new TradingView.widget({
             "autosize": true,
-            "symbol": "BINANCE:USDTBRL", // O par exato para mesas de OTC
-            "interval": "60", // Gráfico de 1 hora
+            // AQUI ESTÁ A CHAVE DE OURO QUE VOCÊ ME PASSOU:
+            "symbol": "FX_IDC:USDBRL*BITSTAMP:USDTUSD*1.0000", 
+            "interval": "60", 
             "timezone": "America/Sao_Paulo",
             "theme": "dark",
-            "style": "1", // Estilo Velas Japonesas
+            "style": "1", 
             "locale": "br",
             "enable_publishing": false,
-            "backgroundColor": "rgba(13, 13, 13, 1)", // Fundo Chumbo Axone
+            "backgroundColor": "rgba(13, 13, 13, 1)", 
             "gridColor": "rgba(255, 255, 255, 0.05)",
             "hide_top_toolbar": false,
             "hide_legend": false,
@@ -1146,35 +1147,21 @@ function iniciarWidgetTV() {
     document.body.appendChild(script);
 }
 
-// ── 2. Motor de Cotação (Blindado com Fallbacks) ─────────────
+// ── 2. Motor de Cotação de Texto (Amigável para PC Local) ───
 async function buscarCotacaoSimples() {
-    // Tentativa 1: Binance (Foco em USDT/BRL - Balcão Real)
-    try {
-        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-        if (r.ok) {
-            const d = await r.json();
-            let preco = parseFloat(d.lastPrice);
-            if (preco > 1) {
-                atualizarDadosCotacao(preco, parseFloat(d.lowPrice), parseFloat(d.highPrice), parseFloat(d.priceChangePercent), 'Binance · USDT/BRL');
-                return;
-            }
-        }
-    } catch(e) { console.warn('Binance falhou, tentando fallback...'); }
-
-    // Tentativa 2: AwesomeAPI (USD Comercial - Segurança Total)
+    // Usamos a AwesomeAPI porque ela não bloqueia arquivos locais (CORS)
     try {
         const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
         if (r.ok) {
             const d = await r.json();
             let preco = parseFloat(d.USDBRL.bid);
             if (preco > 1) {
-                atualizarDadosCotacao(preco, parseFloat(d.USDBRL.low), parseFloat(d.USDBRL.high), parseFloat(d.USDBRL.pctChange), 'AwesomeAPI · Dólar Comercial');
+                atualizarDadosCotacao(preco, parseFloat(d.USDBRL.low), parseFloat(d.USDBRL.high), parseFloat(d.USDBRL.pctChange), 'AwesomeAPI · Dólar (USDT/BRL)');
                 return;
             }
         }
-    } catch(e) { console.warn('AwesomeAPI falhou, exibindo erro.'); }
+    } catch(e) { console.warn('Falha na API primária.', e); }
 
-    // Se a internet do cliente cair ou todas as APIs falharem (Evita tela de "Carregando" eterna)
     if (cotacaoAtual === 0) {
         document.getElementById('cot-preco-principal').textContent = 'Erro de Conexão';
         document.getElementById('ultimo-update').textContent = 'Sem sinal de rede...';
@@ -1201,7 +1188,6 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
     const elFonte = document.getElementById('cot-fonte');
     if (elFonte) elFonte.textContent = fonte;
 
-    // Atualiza os Tickers no Topo do Site (A barra de navegação)
     const elTPrice  = document.getElementById('ticker-price');
     const elTChange = document.getElementById('ticker-change');
     const elTMobile = document.getElementById('ticker-price-mobile');
@@ -1215,9 +1201,9 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
 
     const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
-    document.getElementById('ultimo-update').style.color = '#a0a0a0'; // Volta pro cinza se estava vermelho
+    document.getElementById('ultimo-update').style.color = '#a0a0a0'; 
 
-    calcularSpread(); // Aciona a calculadora com o preço novo
+    calcularSpread(); 
 }
 
 // ── 4. Calculadora de Spread ─────────────────────────────────
@@ -1243,7 +1229,7 @@ function calcularSpread() {
     }
 }
 
-// ── 5. Ferramentas de Cópia e Exportação (Mantidas Intactas) ──
+// ── 5. Ferramentas de Cópia e Exportação ─────────────────────
 function copiarCotacao() {
     const el = document.getElementById('calc-preco-final');
     const texto = el?.textContent.replace('R$ ','').trim();
