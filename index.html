@@ -460,7 +460,7 @@
             </div>
         </div>
 
-        <!-- Calculadora de Spread — layout vertical -->
+        <!-- Calculadora de Spread -->
         <div class="spread-card">
             <h3 style="margin:0 0 24px;font-size:.95rem;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
@@ -481,9 +481,16 @@
                         oninput="calcularSpread()">
                 </div>
 
+                <!-- Preço final + botão copiar lado a lado -->
                 <div class="spread-item">
                     <div class="si-label">Preço Final com Spread (R$)</div>
-                    <div style="font-size:1.5rem;font-weight:700;color:#fff;" id="calc-preco-final">—</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="font-size:1.5rem;font-weight:700;color:#fff;" id="calc-preco-final">—</div>
+                        <button onclick="copiarCotacao()" title="Copiar cotação"
+                            style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 10px;border-radius:8px;cursor:pointer;transition:.2s;flex-shrink:0;display:flex;align-items:center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="spread-item">
@@ -493,17 +500,12 @@
 
             </div>
 
-            <!-- Botões de ação -->
-            <div style="display:flex;gap:12px;margin-top:28px;flex-wrap:wrap;">
-                <button onclick="copiarCotacao()"
-                    style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.2s;letter-spacing:.03em;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    Copiar Cotação
-                </button>
+            <!-- Botão print -->
+            <div style="margin-top:24px;">
                 <button onclick="gerarPrintCotacao()"
                     style="display:flex;align-items:center;gap:8px;background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.2s;letter-spacing:.03em;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Enviar Cotação ao Cliente
+                    Enviar Cotação via Print
                 </button>
             </div>
         </div>
