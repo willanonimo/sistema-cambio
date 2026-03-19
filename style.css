@@ -401,3 +401,117 @@ hr.divider { border:0; border-top:1px solid var(--border); margin:20px 0; }
 .cell-select:hover { border-color: #333; background: rgba(255,255,255,.03); }
 .cell-select:focus { border-color: #555; background: rgba(255,255,255,.06); }
 .cell-select option { background: #1a1a1a; color: #e0e0e0; }
+
+/* ═══ ALINHAMENTO TABELA OPERAÇÕES ══════════════════════════════ */
+#tabela-op-excel th,
+#tabela-op-excel td { box-sizing: border-box; }
+
+/* Colunas numéricas — alinha texto e input à direita */
+#tabela-op-excel th:nth-child(n+4),
+#tabela-op-excel td.td-num { text-align: right; }
+
+#tabela-op-excel td.td-num .cell-input { text-align: right; }
+#tabela-op-excel td.td-calc { color: #a0a0a0; padding: 0 12px; }
+
+/* ═══ EFEITO DIGITAÇÃO — SUBTÍTULO OPERAÇÕES ════════════════════ */
+#op-typing-text {
+    font-size: .85rem;
+    color: #555;
+    min-height: 1.2em;
+    letter-spacing: .01em;
+}
+#op-typing-cursor {
+    display: inline-block;
+    width: 2px; height: .9em;
+    background: #555;
+    margin-left: 2px;
+    vertical-align: middle;
+    animation: blink .7s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ═══ STATUS GLOSSARY ═══════════════════════════════════════════ */
+.status-glossary {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 16px;
+    position: relative;
+}
+.sg-toggle {
+    display: flex; align-items: center; gap: 6px;
+    background: transparent;
+    border: 1px solid #2e2e2e;
+    color: #555;
+    font-size: .75rem; font-weight: 600; letter-spacing: .04em;
+    padding: 6px 12px; border-radius: 7px;
+    cursor: pointer; transition: .2s;
+}
+.sg-toggle:hover { border-color: #444; color: #888; background: rgba(255,255,255,.03); }
+.sg-panel {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    background: #111;
+    border: 1px solid #2e2e2e;
+    border-radius: 12px;
+    padding: 20px 22px;
+    min-width: 360px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.6);
+    z-index: 100;
+}
+.sg-title {
+    font-size: .7rem; font-weight: 700; letter-spacing: .1em;
+    color: #444; text-transform: uppercase; margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 1px solid #1e1e1e;
+}
+.sg-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid #1a1a1a;
+}
+.sg-row:last-child { border-bottom: none; }
+.sg-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 4px;
+}
+.sg-term {
+    display: block;
+    font-size: .83rem; font-weight: 700; color: #e0e0e0;
+    letter-spacing: .02em;
+}
+.sg-pt {
+    display: inline-block;
+    font-size: .7rem; font-weight: 600;
+    color: #555; margin: 2px 0 4px;
+    background: rgba(255,255,255,.04);
+    padding: 1px 7px; border-radius: 4px;
+    border: 1px solid #2a2a2a;
+}
+.sg-desc {
+    display: block;
+    font-size: .75rem; color: #444; line-height: 1.5;
+    margin-top: 3px;
+}
+
+/* ═══ ALINHAMENTO FINO — TABELA OPERAÇÕES ═══════════════════════ */
+#tabela-op-excel td.td-num .cell-input {
+    text-align: right;
+    padding-right: 14px;
+}
+#tabela-op-excel td.td-calc {
+    padding-right: 14px;
+}
+/* Data — não trunca */
+#tabela-op-excel .op-data {
+    width: 100px;
+    min-width: 100px;
+}
+/* Status e Cliente — alinhados à esquerda com padding normal */
+#tabela-op-excel td:nth-child(1),
+#tabela-op-excel td:nth-child(2),
+#tabela-op-excel td:nth-child(3) {
+    text-align: left;
+}
+
+/* ═══ HOME ══════════════════════════════════════════════════════ */
+.home-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+@media(min-width:900px) { .home-grid { grid-template-columns: 1fr 1fr; } }
+.home-link { color: #555; text-decoration: none; font-size: .8rem; transition: .2s; }
+.home-link:hover { color: #888; }
