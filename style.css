@@ -309,27 +309,32 @@ hr.divider { border:0; border-top:1px solid var(--border); margin:20px 0; }
 
 /* ═══ DESKTOP 900px+ ══════════════════════════ */
 @media(min-width:900px){
-    .top-nav       { padding:0 32px; height:62px; position:relative; }
+    .top-nav {
+        padding:0 24px; height:62px;
+        display:flex; align-items:center;
+        justify-content:space-between; gap:8px;
+    }
     .nav-hamburger { display:none; }
     .nav-drawer    { display:none !important; }
-    /* Links centralizados via absolute */
+    /* Logo fixo à esquerda */
+    .nav-logo { flex-shrink:0; }
+    /* Links no centro — flex normal, sem absolute */
     .nav-links {
-        display:flex; gap:4px;
-        position:absolute; left:50%; transform:translateX(-50%);
-        top:50%; margin-top:0; transform:translate(-50%,-50%);
+        display:flex; gap:2px;
+        flex:1; justify-content:center;
     }
     .nav-links a {
         color:var(--text-secondary); text-decoration:none;
-        font-size:.85rem; font-weight:600; padding:8px 14px;
-        border-radius:8px; transition:.2s; white-space:nowrap;
+        font-size:.78rem; font-weight:600; padding:7px 10px;
+        border-radius:7px; transition:.2s; white-space:nowrap;
     }
     .nav-links a:hover  { color:#fff; background:rgba(255,255,255,.05); }
     .nav-links a.active { color:#fff; background:rgba(255,255,255,.08); }
-    /* Lado direito */
-    .nav-right-desktop  { display:flex; align-items:center; gap:14px; margin-left:auto; }
-    .nav-right-desktop .live-ticker { margin-left:0; }
+    /* Lado direito fixo */
+    .nav-right-desktop  { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .nav-right-desktop .live-ticker { margin-left:0; flex-shrink:0; }
     .nav-right-desktop .live-ticker .label { display:inline; }
-    .nav-user           { font-size:.82rem; color:var(--text-secondary); }
+    .nav-user           { font-size:.78rem; color:var(--text-secondary); white-space:nowrap; }
     /* Ticker mobile escondido no desktop */
     .live-ticker-mobile { display:none; }
 
