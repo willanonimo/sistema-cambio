@@ -68,8 +68,9 @@ document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(a => {
         document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
         document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
         document.getElementById('page-' + page).classList.add('active');
-        if (page === 'lucro')    renderLucro();
-        if (page === 'cotacoes') iniciarCotacoes();
+        if (page === 'lucro')      renderLucro();
+        if (page === 'cotacoes')   iniciarCotacoes();
+        if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); else if(window._renderOperacoes) window._renderOperacoes(); }
     });
 });
 
@@ -96,113 +97,501 @@ document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(a => {
 })();
 
 // ── 3. BANCO DE DADOS (localStorage) ────────────────────────
-let opFornecedor = JSON.parse(localStorage.getItem('banco_cambio'))    || [];
-let opClientes   = JSON.parse(localStorage.getItem('banco_clientes'))  || [];
-let cadastrosCli = JSON.parse(localStorage.getItem('banco_cadastros')) || [];
+let opFornecedor = JSON.parse(localStorage.getItem('banco_cambio'))      || [];
+let opClientes   = JSON.parse(localStorage.getItem('banco_clientes'))    || [];
+let cadastrosCli = JSON.parse(localStorage.getItem('banco_cadastros'))   || [];
+let opOperacoes    = JSON.parse(localStorage.getItem('banco_operacoes'))     || [];
+let cadFornecedores = JSON.parse(localStorage.getItem('banco_fornecedores')) || [];
 
-function salvarFornecedor() { localStorage.setItem('banco_cambio',    JSON.stringify(opFornecedor)); }
-function salvarClientes()   { localStorage.setItem('banco_clientes',  JSON.stringify(opClientes)); }
-function salvarCadastros()  { localStorage.setItem('banco_cadastros', JSON.stringify(cadastrosCli)); }
+function salvarFornecedor()    { localStorage.setItem('banco_cambio',       JSON.stringify(opFornecedor)); }
+function salvarClientes()      { localStorage.setItem('banco_clientes',     JSON.stringify(opClientes)); }
+function salvarCadastros()     { localStorage.setItem('banco_cadastros',    JSON.stringify(cadastrosCli)); }
+function salvarOperacoes()     { localStorage.setItem('banco_operacoes',    JSON.stringify(opOperacoes)); }
+function salvarFornecedores()  { localStorage.setItem('banco_fornecedores', JSON.stringify(cadFornecedores)); }
+
+// ── Saldo disponível por cotação (usado por Operações) ────────
+// Retorna quanto USDT ainda resta de cada compra, agrupado por cotação
+function saldoPorCotacao() {
+    // Constrói mapa de saldo disponível por ref de compra
+    const saldos = {};
+    // Parte de todas as compras do fornecedor (mais antigas primeiro)
+    [...opFornecedor].reverse().forEach(op => {
+        saldos[op.ref] = { cotacao: op.cotacao, fornecedor: op.fornecedor || '—', saldo: op.usdt, original: op.usdt };
+    });
+    // Desconta o que já foi vendido nas operações
+    opOperacoes.forEach(venda => {
+        if (venda.compraRef && saldos[venda.compraRef] !== undefined) {
+            saldos[venda.compraRef].saldo -= (venda.usdt || 0);
+        }
+    });
+    return saldos;
+}
+
+// Saldo total disponível (soma de todas as compras menos vendas)
+function saldoTotalDisponivel() {
+    return Object.values(saldoPorCotacao()).reduce((s, v) => s + Math.max(0, v.saldo), 0);
+}
+
+// ============================================================
+// MÓDULO E — OPERAÇÕES (tabela estilo Excel)
+// ============================================================
+// Estrutura de cada linha:
+// { ref, data, status, cliente, usdt, cotCompra, cotVenda, totalCompra, totalVenda, lucro }
+
+let _opInitDone = false;
+
+function initOperacoes() {
+    if (_opInitDone) return;
+    _opInitDone = true;
+
+    const btnNova  = document.getElementById('btn-nova-linha-op');
+    const btnPDF   = document.getElementById('btn-exportar-op');
+    if (btnNova) btnNova.addEventListener('click', () => { adicionarLinhaOp(); });
+    if (btnPDF)  btnPDF.addEventListener('click', exportarOpPDF);
+
+    renderTabelaOp();
+    atualizarCardsOp();
+    dragScroll(document.getElementById('drag-operacoes'));
+}
+
+// ── Adiciona linha nova ou com dados ──────────────────────────
+function adicionarLinhaOp(dados) {
+    const agora = new Date();
+    const linha = dados || {
+        ref:        Date.now(),
+        data:       agora.toLocaleDateString('pt-BR'),
+        status:     'concluida',
+        cliente:    '',
+        usdt:       0,
+        cotCompra:  0,
+        cotVenda:   0,
+        totalCompra:0,
+        totalVenda: 0,
+        lucro:      0,
+    };
+    if (!dados) opOperacoes.unshift(linha);
+    salvarOperacoes();
+    renderTabelaOp();
+    atualizarCardsOp();
+    // Foca na célula USDT da primeira linha
+    setTimeout(() => {
+        const firstInput = document.querySelector('#tabela-operacoes tr:first-child .op-usdt');
+        if (firstInput) firstInput.focus();
+    }, 50);
+}
+
+// ── Renderiza toda a tabela ───────────────────────────────────
+function renderTabelaOp() {
+    const tb = document.getElementById('tabela-operacoes');
+    if (!tb) return;
+
+    // Guarda foco atual para restaurar depois
+    const focusRef  = document.activeElement?.dataset?.ref;
+    const focusField = document.activeElement?.dataset?.field;
+
+    tb.innerHTML = '';
+
+    const statusOpts = [
+        { v:'concluida', l:'Concluída',     cor:'#4CAF50' },
+        { v:'andamento', l:'Em Andamento',  cor:'#ffc107' },
+        { v:'cancelada', l:'Cancelada',     cor:'#ff5555' },
+    ];
+
+    const clientes = cadastrosCli.map(c => c.nome);
+
+    opOperacoes.forEach(op => {
+        const corLucro  = (op.lucro||0) > 0 ? '#4CAF50' : (op.lucro||0) < 0 ? '#ff5555' : '#888';
+        const stOpt     = statusOpts.find(s => s.v === op.status) || statusOpts[0];
+        const tr = document.createElement('tr');
+        tr.dataset.ref = op.ref;
+
+        // Monta opções de clientes
+        const cliOpts = clientes.map(n =>
+            `<option value="${n}" ${op.cliente===n?'selected':''}>${n}</option>`
+        ).join('');
+
+        tr.innerHTML = `
+            <td>
+                <input class="cell-input op-data" data-ref="${op.ref}" data-field="data"
+                    value="${op.data}" style="width:90px;">
+            </td>
+            <td>
+                <select class="cell-select op-status" data-ref="${op.ref}" data-field="status"
+                    style="color:${stOpt.cor};">
+                    ${statusOpts.map(s=>`<option value="${s.v}" ${op.status===s.v?'selected':''} style="color:${s.cor};">${s.l}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select class="cell-select op-cliente" data-ref="${op.ref}" data-field="cliente">
+                    <option value="">— cliente —</option>
+                    ${cliOpts}
+                </select>
+            </td>
+            <td>
+                <input class="cell-input op-usdt" data-ref="${op.ref}" data-field="usdt"
+                    value="${op.usdt ? fmtDisplay(op.usdt) : ''}" placeholder="0,00" style="text-align:right;">
+            </td>
+            <td>
+                <input class="cell-input op-cot-compra" data-ref="${op.ref}" data-field="cotCompra"
+                    value="${op.cotCompra ? fmtCot(op.cotCompra) : ''}" placeholder="0,0000" style="text-align:right;">
+            </td>
+            <td>
+                <input class="cell-input op-cot-venda" data-ref="${op.ref}" data-field="cotVenda"
+                    value="${op.cotVenda ? fmtCot(op.cotVenda) : ''}" placeholder="0,0000" style="text-align:right;">
+            </td>
+            <td style="text-align:right;color:#a0a0a0;padding:0 10px;">
+                ${op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—'}
+            </td>
+            <td style="text-align:right;color:#a0a0a0;padding:0 10px;">
+                ${op.totalVenda ? 'R$ '+fmtDisplay(op.totalVenda) : '—'}
+            </td>
+            <td style="text-align:right;font-weight:700;color:${corLucro};padding:0 10px;">
+                ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
+            </td>
+            <td style="padding:0 8px;">
+                <div style="display:flex;gap:4px;align-items:center;">
+                    ${op.cotVenda && op.cliente ? `
+                    <button class="btn-small" title="Copiar trava" onclick="copiarTrava(${op.ref})"
+                        style="background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:4px 6px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>` : ''}
+                    <button class="btn-small del" title="Excluir linha" onclick="excluirOperacao(${op.ref})"
+                        style="padding:4px 6px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    </button>
+                </div>
+            </td>`;
+
+        // Eventos de edição inline
+        tr.querySelectorAll('.cell-input').forEach(inp => {
+            inp.addEventListener('change', e => salvarCelulaOp(e.target));
+            inp.addEventListener('keydown', e => { if (e.key==='Enter') e.target.blur(); });
+        });
+        tr.querySelectorAll('.cell-select').forEach(sel => {
+            sel.addEventListener('change', e => salvarCelulaOp(e.target));
+        });
+
+        tb.appendChild(tr);
+    });
+
+    // Restaura foco
+    if (focusRef && focusField) {
+        const el = tb.querySelector(`[data-ref="${focusRef}"][data-field="${focusField}"]`);
+        if (el) el.focus();
+    }
+
+    atualizarCardsOp();
+}
+
+// ── Salva alteração de uma célula e recalcula lucro ───────────
+function salvarCelulaOp(el) {
+    const ref   = parseInt(el.dataset.ref);
+    const field = el.dataset.field;
+    const idx   = opOperacoes.findIndex(o => o.ref === ref);
+    if (idx === -1) return;
+
+    const op = opOperacoes[idx];
+
+    if (field === 'usdt' || field === 'cotCompra' || field === 'cotVenda') {
+        op[field] = parseNum(el.value);
+    } else {
+        op[field] = el.value;
+    }
+
+    // Recalcula totais e lucro
+    if (op.usdt && op.cotCompra) op.totalCompra = op.usdt * op.cotCompra;
+    else op.totalCompra = 0;
+
+    if (op.usdt && op.cotVenda)  op.totalVenda = op.usdt * op.cotVenda;
+    else op.totalVenda = 0;
+
+    if (op.totalCompra && op.totalVenda) op.lucro = op.totalVenda - op.totalCompra;
+    else op.lucro = 0;
+
+    opOperacoes[idx] = op;
+    salvarOperacoes();
+
+    // Atualiza só as células calculadas da linha sem re-renderizar tudo
+    const tr = document.querySelector(`#tabela-operacoes tr[data-ref="${ref}"]`);
+    if (tr) {
+        const cells = tr.querySelectorAll('td');
+        const corLucro = op.lucro > 0 ? '#4CAF50' : op.lucro < 0 ? '#ff5555' : '#888';
+        cells[6].textContent = op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—';
+        cells[7].textContent = op.totalVenda  ? 'R$ '+fmtDisplay(op.totalVenda)  : '—';
+        cells[8].style.color = corLucro;
+        cells[8].textContent = op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—';
+        // Atualiza botão trava
+        const btnDiv = cells[9].querySelector('div');
+        if (btnDiv) {
+            const jaTemTrava = btnDiv.querySelector('button[title="Copiar trava"]');
+            if (op.cotVenda && op.cliente && !jaTemTrava) {
+                const btn = document.createElement('button');
+                btn.className = 'btn-small';
+                btn.title = 'Copiar trava';
+                btn.style.cssText = 'background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:4px 6px;';
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+                btn.onclick = () => copiarTrava(op.ref);
+                btnDiv.insertBefore(btn, btnDiv.firstChild);
+            }
+        }
+        // Atualiza cor do status select
+        const selStatus = tr.querySelector('.op-status');
+        if (selStatus && field === 'status') {
+            const stOpts = { concluida:'#4CAF50', andamento:'#ffc107', cancelada:'#ff5555' };
+            selStatus.style.color = stOpts[op.status] || '#fff';
+        }
+    }
+
+    atualizarCardsOp();
+    carregarFornecedor(); // atualiza saldo disponível
+}
+
+// ── Cards de resumo ───────────────────────────────────────────
+function atualizarCardsOp() {
+    const comVenda    = opOperacoes.filter(o => o.cotVenda && o.usdt);
+    const totalLucro  = comVenda.reduce((s,o) => s+(o.lucro||0), 0);
+    const totalVol    = opOperacoes.reduce((s,o) => s+(o.usdt||0), 0);
+    const volVendido  = comVenda.reduce((s,o) => s+(o.usdt||0), 0);
+    const spreadMedio = volVendido > 0 ? totalLucro/volVendido : 0;
+    const saldoDisp   = saldoTotalDisponivel();
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('op-card-saldo',   fmtDisplay(saldoDisp)+' USDT');
+    set('op-card-lucro',   'R$ '+fmtDisplay(totalLucro));
+    set('op-card-volume',  fmtDisplay(totalVol)+' USDT');
+    set('op-card-spread',  'R$ '+fmtCot(spreadMedio));
+
+    const elForn = document.getElementById('card-saldo-disponivel');
+    if (elForn) elForn.textContent = fmtDisplay(saldoDisp)+' USDT';
+}
+
+// ── Excluir linha ─────────────────────────────────────────────
+function excluirOperacao(ref) {
+    if (!confirm('Excluir esta linha?')) return;
+    opOperacoes = opOperacoes.filter(o => o.ref !== ref);
+    salvarOperacoes();
+    renderTabelaOp();
+    carregarFornecedor();
+    toast('Linha excluída.');
+}
+
+// ── Copiar trava para cliente ─────────────────────────────────
+function copiarTrava(ref) {
+    const op = opOperacoes.find(o => o.ref === ref);
+    if (!op || !op.cliente || !op.cotVenda) return;
+    const nome  = op.cliente.toUpperCase().padEnd(12,' ');
+    const usdt  = 'US$ '+fmtDisplay(op.usdt);
+    const cot   = 'R$ '+fmtCot(op.cotVenda);
+    const total = 'R$ '+fmtDisplay(op.totalVenda);
+    const trava = `${nome}   ${usdt}   ${cot}   ${total}`;
+    navigator.clipboard.writeText(trava).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value=trava; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+    toast('Trava copiada! ✓');
+}
+
+// ── Exportar PDF ──────────────────────────────────────────────
+function exportarOpPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l','mm','a4');
+    const pw  = doc.internal.pageSize.getWidth();
+
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('Kroma Capital — Operações', pw/2, 20, {align:'center'});
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, 28, {align:'center'});
+    const totalLucro = opOperacoes.reduce((s,o)=>s+(o.lucro||0),0);
+    doc.text(`Lucro Total: R$ ${fmtDisplay(totalLucro)}`, pw/2, 34, {align:'center'});
+
+    doc.autoTable({
+        startY: 40,
+        head: [['Data','Status','Cliente','USDT','Cot. Compra','Cot. Venda','Total Compra','Total Venda','Lucro']],
+        body: opOperacoes.map(o => [
+            o.data, o.status, o.cliente||'—',
+            fmtDisplay(o.usdt),
+            o.cotCompra ? 'R$ '+fmtCot(o.cotCompra) : '—',
+            o.cotVenda  ? 'R$ '+fmtCot(o.cotVenda)  : '—',
+            o.totalCompra ? 'R$ '+fmtDisplay(o.totalCompra) : '—',
+            o.totalVenda  ? 'R$ '+fmtDisplay(o.totalVenda)  : '—',
+            o.lucro       ? 'R$ '+fmtDisplay(o.lucro)       : '—',
+        ]),
+        styles: { fontSize:8, cellPadding:3 },
+        headStyles: { fillColor:[30,30,30], textColor:[200,200,200] },
+        alternateRowStyles: { fillColor:[245,245,245] },
+    });
+    doc.save('kroma-operacoes.pdf');
+}
+
+// Expõe para navegação
+window._renderOperacoes = renderTabelaOp;
+window._initOperacoes   = initOperacoes;
+
 
 // ============================================================
 // MÓDULO A — FORNECEDOR
 // ============================================================
-const iValComp = document.getElementById('valor-comprado');
-const iCot     = document.getElementById('cotacao');
-const iTotAuto = document.getElementById('total-automatico');
-const iValPix  = document.getElementById('valor-pix');
-const iRefPix  = document.getElementById('referencia-pix');
-const btnReg   = document.getElementById('btn-registrar');
-const btnCan   = document.getElementById('btn-cancelar');
-const iFiltroD = document.getElementById('filtro-data');
-const btnLimp  = document.getElementById('btn-limpar-filtro');
-const tbHist   = document.getElementById('tabela-historico');
+(function() {
+    const iValComp = document.getElementById('valor-comprado');
+    const iCot     = document.getElementById('cotacao');
+    const iTotAuto = document.getElementById('total-automatico');
+    const iValPix  = document.getElementById('valor-pix');
+    const iRefPix  = document.getElementById('referencia-pix');
+    const iSelForn = document.getElementById('select-fornecedor');
+    const btnReg   = document.getElementById('btn-registrar');
+    const btnCan   = document.getElementById('btn-cancelar');
+    const iFiltroD = document.getElementById('filtro-data');
+    const btnLimp  = document.getElementById('btn-limpar-filtro');
+
+    if (!btnReg) return;
+
+    function calcTotalForn() {
+        const total = parseNum(iValComp.value) * parseNum(iCot.value);
+        iTotAuto.value = total > 0 ? fmtDisplay(total) : '';
+    }
+
+    iValComp.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); calcTotalForn(); });
+    iCot.addEventListener('input', calcTotalForn);
+    iValPix.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); });
+
+    function limparForn() {
+        iValComp.value=''; iCot.value=''; iTotAuto.value=''; iValPix.value='';
+        if (iRefPix) iRefPix.value='';
+        iValComp.focus();
+    }
+    btnCan.addEventListener('click', limparForn);
+    document.addEventListener('keydown', e => { if (e.key==='Escape') limparForn(); });
+
+    btnReg.addEventListener('click', () => {
+        const usdt  = parseNum(iValComp.value);
+        const cot   = parseNum(iCot.value);
+        const total = parseNum(iTotAuto.value) || usdt * cot;
+        const pix   = parseNum(iValPix.value);
+        const ref   = iRefPix ? iRefPix.value.trim() : '';
+        const forn  = iSelForn ? iSelForn.value.trim() : '';
+
+        if (usdt===0 && pix===0) { toast('Preencha USDT ou o valor pago.','error'); return; }
+        if (usdt>0 && cot===0)   { toast('Informe a Cotação de Compra.','error'); return; }
+        if (!forn)               { toast('Selecione ou cadastre um fornecedor.','error'); return; }
+
+        const now = new Date();
+        opFornecedor.unshift({
+            ref:        Date.now(),
+            data:       now.toLocaleDateString('pt-BR'),
+            hora:       now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+            usdt, cotacao:cot, totalBrl:total, pix, pendente:usdt, ref, fornecedor:forn
+        });
+        salvarFornecedor();
+        carregarFornecedor();
+        limparForn();
+        toast('Operação registrada com sucesso!', 'success');
+    });
+
+    if (iFiltroD) iFiltroD.addEventListener('change', carregarFornecedor);
+    if (btnLimp)  btnLimp.addEventListener('click', () => { iFiltroD.value=''; carregarFornecedor(); });
+
+    // ── Gestão de fornecedores ────────────────────────────────
+    const btnAddForn  = document.getElementById('btn-add-fornecedor');
+    const inputNovoF  = document.getElementById('input-novo-fornecedor');
+
+    function popularSelectForn() {
+        if (!iSelForn) return;
+        const atual = iSelForn.value;
+        iSelForn.innerHTML = '<option value="">— Selecione o fornecedor —</option>';
+        cadFornecedores.forEach(f => {
+            const o = document.createElement('option');
+            o.value = f; o.textContent = f;
+            iSelForn.appendChild(o);
+        });
+        if (atual) iSelForn.value = atual;
+    }
+
+    if (btnAddForn && inputNovoF) {
+        btnAddForn.addEventListener('click', () => {
+            const nome = inputNovoF.value.trim();
+            if (!nome) { toast('Digite o nome do fornecedor.','error'); return; }
+            if (cadFornecedores.includes(nome)) { toast('Fornecedor já cadastrado.','error'); return; }
+            cadFornecedores.push(nome);
+            salvarFornecedores();
+            popularSelectForn();
+            iSelForn.value = nome;
+            inputNovoF.value = '';
+            toast('Fornecedor cadastrado!');
+        });
+    }
+
+    popularSelectForn();
+    window._popularSelectForn = popularSelectForn;
+    window._carregarFornecedor = carregarFornecedor;
+})();
 
 let opExibidas = [];
 
-function calcTotalForn() {
-    const total = parseNum(iValComp.value) * parseNum(iCot.value);
-    iTotAuto.value = total > 0 ? fmtDisplay(total) : '';
-}
-
-iValComp.addEventListener('input', e=>{ e.target.value=fmtMoeda(e.target.value); calcTotalForn(); });
-iCot.addEventListener('input', calcTotalForn);
-iValPix.addEventListener('input', e=>{ e.target.value=fmtMoeda(e.target.value); });
-
-function limparForn() {
-    iValComp.value=''; iCot.value=''; iTotAuto.value=''; iValPix.value='';
-    if(iRefPix) iRefPix.value='';
-    iValComp.focus();
-}
-btnCan.addEventListener('click', limparForn);
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') limparForn(); });
-
-btnReg.addEventListener('click', ()=>{
-    const usdt  = parseNum(iValComp.value);
-    const cot   = parseNum(iCot.value);
-    const total = parseNum(iTotAuto.value);
-    const pix   = parseNum(iValPix.value);
-    const ref   = iRefPix ? iRefPix.value.trim() : '';
-
-    if (usdt===0 && pix===0) { toast('Preencha USDT ou o valor pago.','error'); return; }
-    if (usdt>0 && cot===0)   { toast('Informe a Cotação de Compra.','error'); return; }
-
-    const now = new Date();
-    opFornecedor.unshift({
-        data: now.toLocaleDateString('pt-BR'),
-        hora: now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-        usdt, cotacao:cot, totalBrl:total, pix, pendente:usdt, ref
-    });
-    salvarFornecedor();
-    carregarFornecedor();
-    limparForn();
-    toast('Operação registrada com sucesso!', 'success');
-});
-
 function carregarFornecedor() {
+    const iFiltroD = document.getElementById('filtro-data');
+    const btnLimp  = document.getElementById('btn-limpar-filtro');
+    const tbHist   = document.getElementById('tabela-historico');
+    if (!tbHist) return;
+
     let filtroData = '';
     if (iFiltroD && iFiltroD.value) {
         const p = iFiltroD.value.split('-');
         filtroData = `${p[2]}/${p[1]}/${p[0]}`;
-        if(btnLimp) btnLimp.style.display='inline-block';
+        if (btnLimp) btnLimp.style.display='inline-block';
     } else {
-        if(btnLimp) btnLimp.style.display='none';
+        if (btnLimp) btnLimp.style.display='none';
     }
 
     opExibidas = filtroData ? opFornecedor.filter(o=>o.data===filtroData) : [...opFornecedor];
+
+    // Calcula saldo de cada compra (descontando vendas já feitas)
+    const saldos = saldoPorCotacao();
 
     tbHist.innerHTML = '';
     let totUsdt=0, totPendente=0, totBrl=0, totPix=0;
 
     if (!opExibidas.length) {
         const msg = filtroData ? `Sem operações em ${filtroData}.` : 'Nenhuma operação registrada ainda.';
-        tbHist.innerHTML = `<tr><td colspan="8" class="empty-state">${msg}</td></tr>`;
+        tbHist.innerHTML = `<tr><td colspan="9" class="empty-state">${msg}</td></tr>`;
     }
 
     opExibidas.forEach(op => {
-        const idx = opFornecedor.indexOf(op);
-        totUsdt    += op.usdt;
-        totPendente += op.pendente;
-        totBrl     += op.totalBrl;
-        totPix     += op.pix;
+        const idx         = opFornecedor.indexOf(op);
+        const saldoInfo   = saldos[op.ref] || {};
+        const saldoUsdt   = saldoInfo.saldo !== undefined ? Math.max(0, saldoInfo.saldo) : op.usdt;
+        const vendido     = op.usdt - saldoUsdt;
 
-        const corPend = op.pendente===0 ? '#4CAF50' : '#ff5555';
-        const ref = op.ref ? `<br><small style="color:#888;font-weight:normal;">Ref: ${op.ref}</small>` : '';
+        totUsdt     += op.usdt;
+        totPendente += op.pendente;
+        totBrl      += op.totalBrl;
+        totPix      += op.pix;
+
+        const corSaldo = saldoUsdt <= 0 ? '#4CAF50' : saldoUsdt < op.usdt ? '#ffc107' : '#ff5555';
+        const refStr   = op.ref ? `<br><small style="color:#888;font-weight:normal;">${op.ref}</small>` : '';
+        const fornStr  = op.fornecedor ? `<br><small style="color:#888;">${op.fornecedor}</small>` : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${op.data}</td>
+            <td>${op.data}${fornStr}</td>
             <td>${op.hora}</td>
             <td style="color:#4CAF50;font-weight:700;">${fmtDisplay(op.usdt)}</td>
             <td>R$ ${fmtCot(op.cotacao)}</td>
             <td>R$ ${fmtDisplay(op.totalBrl)}</td>
-            <td style="color:#2196F3;font-weight:700;">R$ ${fmtDisplay(op.pix)}${ref}</td>
-            <td style="color:${corPend};font-weight:700;">${fmtDisplay(op.pendente)}</td>
+            <td style="color:#2196F3;font-weight:700;">R$ ${fmtDisplay(op.pix)}${refStr}</td>
+            <td style="color:${corSaldo};font-weight:700;" title="Vendido: ${fmtDisplay(vendido)} USDT">
+                ${fmtDisplay(saldoUsdt)}
+                ${vendido>0?`<br><small style="color:#888;font-weight:normal;">Vendido: ${fmtDisplay(vendido)}</small>`:''}
+            </td>
+            <td style="color:${op.pendente<=0?'#4CAF50':'#ff5555'};font-weight:700;">${fmtDisplay(op.pendente)}</td>
             <td style="display:flex;gap:6px;">
                 <button class="btn-small ok" ${op.pendente<=0?'disabled style="opacity:.3;cursor:not-allowed;"':''}>Receber</button>
-                <button class="btn-small del" title="Excluir"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                <button class="btn-small del" title="Excluir">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
             </td>`;
 
-        tr.querySelectorAll('button')[0].addEventListener('click', ()=>{
+        tr.querySelectorAll('button')[0].addEventListener('click', () => {
             if (op.pendente<=0) return;
             const v = prompt(`Falta: ${fmtDisplay(op.pendente)} USDT\nQuantos recebeu agora?`);
             if (!v) return;
@@ -214,7 +603,7 @@ function carregarFornecedor() {
             carregarFornecedor();
             toast(`${fmtDisplay(n)} USDT recebidos!`, 'success');
         });
-        tr.querySelectorAll('button')[1].addEventListener('click', ()=>{
+        tr.querySelectorAll('button')[1].addEventListener('click', () => {
             if (confirm('Excluir esta operação permanentemente?')) {
                 opFornecedor.splice(idx,1);
                 salvarFornecedor();
@@ -228,187 +617,41 @@ function carregarFornecedor() {
     let pendBrl = totBrl - totPix;
     if (pendBrl<0) pendBrl=0;
 
-    document.getElementById('card-vol-usdt').textContent     = fmtDisplay(totUsdt);
-    document.getElementById('card-vol-brl').textContent      = 'R$ '+fmtDisplay(totBrl);
-    document.getElementById('card-forn-comprado').textContent = fmtDisplay(totUsdt);
-    document.getElementById('card-forn-pendente').textContent = fmtDisplay(totPendente);
-    document.getElementById('card-pagar-enviado').textContent = 'R$ '+fmtDisplay(totPix);
-    document.getElementById('card-pagar-pendente').textContent= 'R$ '+fmtDisplay(pendBrl);
-}
+    const saldoDisp = saldoTotalDisponivel();
+    document.getElementById('card-vol-usdt').textContent      = fmtDisplay(totUsdt);
+    document.getElementById('card-vol-brl').textContent       = 'R$ '+fmtDisplay(totBrl);
+    document.getElementById('card-forn-comprado').textContent  = fmtDisplay(totUsdt);
+    document.getElementById('card-forn-pendente').textContent  = fmtDisplay(totPendente);
+    document.getElementById('card-pagar-enviado').textContent  = 'R$ '+fmtDisplay(totPix);
+    document.getElementById('card-pagar-pendente').textContent = 'R$ '+fmtDisplay(pendBrl);
 
-if (iFiltroD) iFiltroD.addEventListener('change', carregarFornecedor);
-if (btnLimp)  btnLimp.addEventListener('click', ()=>{ iFiltroD.value=''; carregarFornecedor(); });
+    // Card saldo disponível (novo)
+    const elSaldo = document.getElementById('card-saldo-disponivel');
+    if (elSaldo) elSaldo.textContent = fmtDisplay(saldoDisp) + ' USDT';
+
+    // Atualiza card de saldo em Operações também
+    const elOpSaldo = document.getElementById('op-card-saldo');
+    if (elOpSaldo) elOpSaldo.textContent = fmtDisplay(saldoDisp) + ' USDT';
+
+    // Exportar PDF
+    const btnPDF = document.getElementById('btn-exportar-pdf');
+    if (btnPDF) {
+        btnPDF.onclick = () => {
+            if (!opExibidas.length) { toast('Sem dados para exportar.','error'); return; }
+            exportarPDF(opExibidas);
+        };
+    }
+
+    dragScroll(document.getElementById('drag-fornecedor'));
+}
 
 carregarFornecedor();
-
-// Drag-to-scroll Fornecedor
-dragScroll(document.getElementById('drag-fornecedor'));
-
-// PDF Export
-document.getElementById('btn-exportar-pdf').addEventListener('click', ()=>{
-    if (!opExibidas.length) { toast('Sem dados para exportar.','error'); return; }
-    exportarPDF(opExibidas);
-});
-
-function exportarPDF(dados) {
-    let tU=0,tP=0,tPend=0,tBrl=0;
-    dados.forEach(o=>{ tU+=o.usdt; tP+=o.pix; tPend+=o.pendente; tBrl+=o.totalBrl; });
-    let faltaPagar = Math.max(0, tBrl-tP);
-
-    const {jsPDF} = window.jspdf;
-    const doc = new jsPDF('l','mm','a4');
-    const pw = doc.internal.pageSize.getWidth();
-
-    doc.setDrawColor(35,35,35); doc.setLineWidth(1.5); doc.line(14,15,14,25);
-    doc.setFontSize(20); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
-    doc.text('K R O M A',19,21);
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120);
-    doc.text('C A P I T A L',19,25);
-
-    const p0 = dados[dados.length-1].data, p1 = dados[0].data;
-    doc.text(p0===p1?`Data: ${p0}`:`Período: ${p0} a ${p1}`, 14, 32);
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 36);
-    doc.setDrawColor(220,220,220); doc.setLineWidth(.3); doc.line(14,40,pw-14,40);
-
-    doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
-    doc.text('Resumo de Saldos Financeiros',14,48);
-
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(35,35,35);
-    doc.text(`Total USDT Comprado: ${fmtDisplay(tU)} USDT`,14,56);
-    doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
-    doc.text(`Pendente a Receber: ${fmtDisplay(tPend)} USDT`,14,62);
-    doc.setFont('helvetica','normal'); doc.setTextColor(35,35,35);
-    doc.text(`Total Pago: R$ ${fmtDisplay(tP)}`,pw/2,56);
-    doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
-    doc.text(`Falta Pagar: R$ ${fmtDisplay(faltaPagar)}`,pw/2,62);
-
-    doc.autoTable({
-        startY:70,
-        head:[['Data','Hora','USDT Comprado','Cotação','Total (R$)','Valor Pago','Falta Receber','Ref.']],
-        body: dados.map(o=>[
-            o.data, o.hora,
-            o.usdt>0?fmtDisplay(o.usdt):'-',
-            o.cotacao>0?'R$ '+fmtCot(o.cotacao):'-',
-            o.totalBrl>0?'R$ '+fmtDisplay(o.totalBrl):'-',
-            o.pix>0?'R$ '+fmtDisplay(o.pix):'-',
-            o.pendente>0?fmtDisplay(o.pendente):'-',
-            o.ref||'-'
-        ]),
-        theme:'plain',
-        headStyles:{fillColor:[35,35,35],textColor:[240,240,245],fontStyle:'bold',halign:'center'},
-        bodyStyles:{textColor:[60,60,60],halign:'center',fontSize:9},
-        alternateRowStyles:{fillColor:[248,248,250]}
-    });
-
-    const da = p0===p1?p0.replace(/\//g,'-'):new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
-    doc.save(`Extrato_Kroma_${da}.pdf`);
-    toast('Relatório PDF gerado com sucesso!', 'success');
-}
-
 // ============================================================
 // MÓDULO B — CLIENTES
 // ============================================================
-const cliSelect      = document.getElementById('cli-select');
-const cliUsdt        = document.getElementById('cli-usdt');
-const cliCotVenda    = document.getElementById('cli-cotacao-venda');
-const cliTotalBrl    = document.getElementById('cli-total-brl');
-const cliPagoBrl     = document.getElementById('cli-pago-brl');
-const cliStatusEnvio = document.getElementById('cli-status-envio');
-const cliRef         = document.getElementById('cli-ref');
-const cliSaldoDisp   = document.getElementById('cli-saldo-display');
-const btnRegCli      = document.getElementById('btn-registrar-cliente');
-const btnCanCli      = document.getElementById('btn-cancelar-cliente');
 const tbClientes     = document.getElementById('tabela-clientes');
 const filtroCliHist  = document.getElementById('filtro-cliente-hist');
 const filtroDataCli  = document.getElementById('filtro-data-cli');
-
-// Tabs clientes
-document.getElementById('tab-nova-op').addEventListener('click', ()=>{
-    document.getElementById('painel-nova-op').style.display='block';
-    document.getElementById('painel-cadastro').style.display='none';
-    document.getElementById('tab-nova-op').classList.add('active');
-    document.getElementById('tab-cadastro').classList.remove('active');
-});
-document.getElementById('tab-cadastro').addEventListener('click', ()=>{
-    document.getElementById('painel-nova-op').style.display='none';
-    document.getElementById('painel-cadastro').style.display='block';
-    document.getElementById('tab-cadastro').classList.add('active');
-    document.getElementById('tab-nova-op').classList.remove('active');
-});
-
-// Cálculo automático cliente
-function calcTotalCli() {
-    const total = parseNum(cliUsdt.value) * parseNum(cliCotVenda.value);
-    cliTotalBrl.value = total > 0 ? fmtDisplay(total) : '';
-
-    // Calcula saldo USDT do cliente (já enviado vs. comprado)
-    const nome = cliSelect.value;
-    if (nome) {
-        const saldo = getSaldoCliente(nome);
-        const novoUsdt = parseNum(cliUsdt.value);
-        cliSaldoDisp.value = fmtDisplay(saldo + novoUsdt) + ' USDT';
-    }
-}
-
-cliUsdt.addEventListener('input', e=>{ e.target.value=fmtMoeda(e.target.value); calcTotalCli(); });
-cliCotVenda.addEventListener('input', calcTotalCli);
-cliPagoBrl.addEventListener('input', e=>{ e.target.value=fmtMoeda(e.target.value); });
-cliSelect.addEventListener('change', calcTotalCli);
-
-function getSaldoCliente(nome) {
-    // Saldo = soma de USDT comprado - soma de USDT já enviado (status=enviado)
-    return opClientes
-        .filter(o=>o.cliente===nome)
-        .reduce((acc,o)=>{
-            const enviado = o.statusEnvio==='enviado' ? o.usdt : (o.statusEnvio==='parcial' ? o.usdt*0.5 : 0);
-            return acc + o.usdt - enviado;
-        }, 0);
-}
-
-function limparCli() {
-    cliUsdt.value=''; cliCotVenda.value=''; cliTotalBrl.value='';
-    cliPagoBrl.value=''; cliRef.value=''; cliSaldoDisp.value='';
-    cliStatusEnvio.value='pendente';
-}
-btnCanCli.addEventListener('click', limparCli);
-
-btnRegCli.addEventListener('click', ()=>{
-    const cliente = cliSelect.value;
-    const usdt    = parseNum(cliUsdt.value);
-    const cot     = parseNum(cliCotVenda.value);
-    const total   = parseNum(cliTotalBrl.value);
-    const pago    = parseNum(cliPagoBrl.value);
-    const status  = cliStatusEnvio.value;
-    const ref     = cliRef.value.trim();
-
-    if (!cliente)   { toast('Selecione um cliente.','error'); return; }
-    if (usdt===0)   { toast('Informe o USDT vendido.','error'); return; }
-    if (cot===0)    { toast('Informe a cotação de venda.','error'); return; }
-
-    // Busca cotação de compra do dia para calcular spread
-    const cotCompra = getCotCompraMedia();
-
-    const now = new Date();
-    opClientes.unshift({
-        data: now.toLocaleDateString('pt-BR'),
-        hora: now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-        cliente, usdt, cotacaoVenda:cot, totalBrl:total,
-        pagoBrl:pago, statusEnvio:status, ref,
-        cotacaoCompra: cotCompra
-    });
-    salvarClientes();
-    carregarClientes();
-    limparCli();
-    toast('Venda registrada com sucesso!', 'success');
-});
-
-function getCotCompraMedia() {
-    // Média das cotações de compra do fornecedor hoje
-    const hoje = new Date().toLocaleDateString('pt-BR');
-    const ops  = opFornecedor.filter(o=>o.data===hoje && o.cotacao>0);
-    if (!ops.length) return 0;
-    return ops.reduce((a,o)=>a+o.cotacao,0)/ops.length;
-}
 
 // Cadastrar cliente
 document.getElementById('btn-cadastrar-cliente').addEventListener('click', ()=>{
@@ -430,8 +673,9 @@ document.getElementById('btn-cadastrar-cliente').addEventListener('click', ()=>{
 
 function atualizarSelectsClientes() {
     const opts = cadastrosCli.map(c=>`<option value="${c.nome}">${c.nome}</option>`).join('');
-    cliSelect.innerHTML    = '<option value="">— Selecione o cliente —</option>' + opts;
-    filtroCliHist.innerHTML= '<option value="">Todos</option>' + opts;
+    if (filtroCliHist) filtroCliHist.innerHTML = '<option value="">Todos</option>' + opts;
+    // Atualiza select de operações também
+    if (window._popularClientesOp) window._popularClientesOp();
 }
 
 function carregarClientes() {
@@ -642,65 +886,63 @@ function iniciarCotacoes() {
     setInterval(buscarVelas,  300000); // atualiza velas a cada 5 min
 }
 
-// ── Cotação USDT/BRL via AwesomeAPI (dólar comercial × USDTUSD) ──
-// FX_IDC:USDBRL * BITSTAMP:USDTUSD — mesma fórmula do TradingView
+// ── Cotação USDT/BRL — BCB (USD/BRL) × Binance (USDT/USD) ──────
+// Fórmula: USDT/BRL = USD/BRL × USDT/USD  (igual ao TradingView)
 async function buscarCotacao() {
     try {
-        // AwesomeAPI: dólar comercial BRL (gratuita, sem chave)
-        const [rUsd, rUsdt] = await Promise.all([
-            fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL'),
-            fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL')
+        // Busca USD/BRL do BCB e USDT/USD da Binance em paralelo
+        const [rBcb, rBin] = await Promise.all([
+            fetch(`https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@d)?@d='${bcbDataHoje()}'&$top=1&$orderby=dataHoraCotacao%20desc&$format=json&$select=cotacaoCompra,cotacaoVenda`),
+            fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTUSDT').catch(()=>null)
         ]);
 
-        const dUsd  = await rUsd.json();
-        const dUsdt = await rUsdt.json();
+        const dBcb = await rBcb.json();
+        if (!dBcb.value || !dBcb.value.length) throw new Error('BCB sem dados');
 
-        const usdBrl  = parseFloat(dUsd.USDBRL.bid);   // dólar comercial
-        const usdtBrl = parseFloat(dUsdt.USDTBRL.bid); // USDT em BRL
+        const usdBrl = (parseFloat(dBcb.value[0].cotacaoCompra) + parseFloat(dBcb.value[0].cotacaoVenda)) / 2;
 
-        // Usa USDT/BRL diretamente da AwesomeAPI — mais preciso que Binance
-        cotacaoAtual = usdtBrl;
-
-        const high   = parseFloat(dUsdt.USDTBRL.high);
-        const low    = parseFloat(dUsdt.USDTBRL.low);
-        const pctChg = parseFloat(dUsdt.USDTBRL.pctChange);
-
-        // Hero
-        document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(cotacaoAtual);
-        const elVar = document.getElementById('cot-variacao');
-        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + pctChg.toFixed(2) + '% nas últimas 24h';
-        elVar.className   = 'ch-change ' + (pctChg >= 0 ? 'up' : 'down');
-
-        document.getElementById('cot-min').textContent = 'R$ ' + fmtCot(low);
-        document.getElementById('cot-max').textContent = 'R$ ' + fmtCot(high);
-
-        const elFonte = document.getElementById('cot-fonte');
-        if (elFonte) elFonte.textContent = 'AwesomeAPI · Dólar Comercial';
-
-        // Ticker nav
-        const elTPrice  = document.getElementById('ticker-price');
-        const elTChange = document.getElementById('ticker-change');
-        if (elTPrice)  elTPrice.textContent  = 'R$ ' + fmtCot(cotacaoAtual);
-        if (elTChange) {
-            elTChange.textContent = (pctChg >= 0 ? '+' : '') + pctChg.toFixed(2) + '%';
-            elTChange.className   = 'change ' + (pctChg >= 0 ? 'up' : 'down');
+        // USDT/USD — normalmente ~1.0000 mas pode variar levemente
+        let usdtUsd = 1.0;
+        if (rBin) {
+            try {
+                // USDTUSDT não existe — usa BTCUSDT/BTCUSDT proxy ou assume 1.0
+                // Melhor: busca USDT na Binance diretamente
+                const rb2 = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDCUSDT');
+                // USDC≈USDT, ambos ≈1 USD. Usar como proxy do USDT/USD
+                const db2 = await rb2.json();
+                usdtUsd = parseFloat(db2.price) || 1.0;
+            } catch(_) { usdtUsd = 1.0; }
         }
 
-        const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-        document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
+        cotacaoAtual = usdBrl * usdtUsd;
 
-        calcularSpread();
+        // Variação % via Binance USDTBRL
+        let pctChg = 0, lo = cotacaoAtual * 0.998, hi = cotacaoAtual * 1.002;
+        try {
+            const rb3 = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+            const db3 = await rb3.json();
+            pctChg = parseFloat(db3.priceChangePercent) || 0;
+            const binLo = parseFloat(db3.lowPrice);
+            const binHi = parseFloat(db3.highPrice);
+            // Binance low/high podem estar invertidos (valor < 1)
+            lo = binLo > 1 ? binLo : usdBrl * 0.998;
+            hi = binHi > 1 ? binHi : usdBrl * 1.002;
+        } catch(_) {}
+
+        atualizarHeroCotacao(cotacaoAtual, lo, hi, pctChg, 'BCB × Binance · USDT/BRL');
 
     } catch(e) {
-        // Fallback: tenta só USDT da AwesomeAPI
+        // Fallback: só Binance com correção
         try {
-            const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL');
-            const d = await r.json();
-            cotacaoAtual = parseFloat(d.USDTBRL.bid);
-            document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(cotacaoAtual);
-            const elTPrice = document.getElementById('ticker-price');
-            if (elTPrice) elTPrice.textContent = 'R$ ' + fmtCot(cotacaoAtual);
-            calcularSpread();
+            const rb = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+            const db = await rb.json();
+            let preco = parseFloat(db.lastPrice);
+            if (preco < 1) preco = 1 / preco;
+            cotacaoAtual = preco;
+            const pct = parseFloat(db.priceChangePercent) || 0;
+            const lo  = parseFloat(db.lowPrice)  > 1 ? parseFloat(db.lowPrice)  : preco * 0.998;
+            const hi  = parseFloat(db.highPrice) > 1 ? parseFloat(db.highPrice) : preco * 1.002;
+            atualizarHeroCotacao(preco, lo, hi, pct, 'Binance USDT/BRL');
         } catch(e2) {
             document.getElementById('cot-preco-principal').textContent = 'Indisponível';
             document.getElementById('ultimo-update').textContent = 'Erro ao obter cotação';
@@ -708,33 +950,96 @@ async function buscarCotacao() {
     }
 }
 
-// ── Velas USDT/BRL — AwesomeAPI histórico diário ─────────────
-// Busca os últimos 30 dias de dólar comercial e monta OHLC simulado
-// A AwesomeAPI retorna fechamento diário — usamos para construir as velas
+// Retorna data útil mais recente no formato MM-DD-YYYY (padrão BCB)
+function bcbDataHoje() {
+    const d = new Date();
+    const dow = d.getDay();
+    if (dow === 0) d.setDate(d.getDate() - 2); // domingo → sexta
+    if (dow === 6) d.setDate(d.getDate() - 1); // sábado → sexta
+    const dd   = String(d.getDate()).padStart(2,'0');
+    const mm   = String(d.getMonth()+1).padStart(2,'0');
+    return `${mm}-${dd}-${d.getFullYear()}`;
+}
+
+function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
+    document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(preco);
+
+    const elVar = document.getElementById('cot-variacao');
+    if (pctChg !== 0) {
+        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% nas últimas 24h';
+        elVar.className   = 'ch-change ' + (pctChg >= 0 ? 'up' : 'down');
+    } else {
+        elVar.textContent = '';
+    }
+
+    document.getElementById('cot-min').textContent = 'R$ ' + fmtCot(low);
+    document.getElementById('cot-max').textContent = 'R$ ' + fmtCot(high);
+
+    const elFonte = document.getElementById('cot-fonte');
+    if (elFonte) elFonte.textContent = fonte;
+
+    const elTPrice  = document.getElementById('ticker-price');
+    const elTChange = document.getElementById('ticker-change');
+    const elTMobile = document.getElementById('ticker-price-mobile');
+    if (elTPrice)  elTPrice.textContent  = 'R$ ' + fmtCot(preco);
+    if (elTMobile) elTMobile.textContent = 'R$ ' + fmtCot(preco);
+    if (elTChange && pctChg !== 0) {
+        elTChange.textContent = (pctChg >= 0 ? '+' : '') + pctChg.toFixed(2) + '%';
+        elTChange.className   = 'change ' + (pctChg >= 0 ? 'up' : 'down');
+    }
+
+    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
+
+    calcularSpread();
+}
+
+// ── Velas USDT/BRL — BCB histórico diário × fator USDT/USD ────
 async function buscarVelas() {
     try {
-        // Busca 30 dias de histórico USD-BRL da AwesomeAPI
-        const r = await fetch('https://economia.awesomeapi.com.br/json/daily/USDT-BRL/30');
-        if (!r.ok) throw new Error('API error');
-        const dados = await r.json();
+        const fim = new Date();
+        const ini = new Date(); ini.setDate(ini.getDate() - 50);
 
-        // dados vem do mais recente para o mais antigo — invertemos
-        const sorted = dados.reverse();
+        const fmtBcb = d => {
+            const dd   = String(d.getDate()).padStart(2,'0');
+            const mm   = String(d.getMonth()+1).padStart(2,'0');
+            return `${mm}-${dd}-${d.getFullYear()}`;
+        };
 
-        velasData = sorted.map((d, i) => {
-            const close = parseFloat(d.bid);
-            const high  = parseFloat(d.high);
-            const low   = parseFloat(d.low);
-            // open = fechamento do dia anterior (ou aprox)
-            const open  = i > 0 ? parseFloat(sorted[i-1].bid) : close;
-            const ts    = new Date(parseInt(d.timestamp) * 1000);
-            const label = ts.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
-            return { t: label, open, high, low, close };
+        const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@di,dataFinalCotacao=@df)?@di='${fmtBcb(ini)}'&@df='${fmtBcb(fim)}'&$top=200&$orderby=dataHoraCotacao%20asc&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`;
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('BCB error');
+        const d = await r.json();
+        const itens = d.value;
+        if (!itens || !itens.length) throw new Error('Sem dados BCB');
+
+        // Agrupa por dia (formato dataHoraCotacao: "YYYY-MM-DD HH:MM:SS.mmm")
+        const porDia = {};
+        itens.forEach(item => {
+            // Extrai só a data "YYYY-MM-DD"
+            const dia = item.dataHoraCotacao.substring(0, 10);
+            if (!porDia[dia]) porDia[dia] = [];
+            const med = (parseFloat(item.cotacaoCompra) + parseFloat(item.cotacaoVenda)) / 2;
+            porDia[dia].push(med);
+        });
+
+        const dias = Object.keys(porDia).sort().slice(-30);
+
+        velasData = dias.map((dia, i) => {
+            const vals  = porDia[dia];
+            const close = vals[vals.length - 1];
+            const open  = i > 0 ? porDia[dias[i-1]][porDia[dias[i-1]].length - 1] : vals[0];
+            const high  = Math.max(...vals);
+            const low   = Math.min(...vals);
+            // Formata label DD/MM
+            const partes = dia.split('-');
+            return { t: `${partes[2]}/${partes[1]}`, open, high, low, close };
         });
 
         renderVelas();
     } catch(e) {
-        console.warn('Erro ao buscar histórico de velas:', e);
+        console.warn('Erro velas BCB:', e);
     }
 }
 
