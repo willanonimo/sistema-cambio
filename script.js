@@ -20,6 +20,20 @@ function logout() {
     window.location.href = 'login.html';
 }
 
+// ── 0.0 HOME LINKS (dentro das tabelas do home) ──────────────
+document.addEventListener('click', e => {
+    const a = e.target.closest('.home-link');
+    if (!a) return;
+    e.preventDefault();
+    const page = a.dataset.page;
+    if (!page) return;
+    document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('page-' + page)?.classList.add('active');
+    if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); }
+});
+
 // ── 0.1 DATA DINÂMICA ────────────────────────────────────────
 (function() {
     const el = document.getElementById('data-atual');
@@ -63,16 +77,35 @@ document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(a => {
     a.addEventListener('click', e => {
         e.preventDefault();
         const page = a.dataset.page;
-        // Marca active em todos os links (desktop + drawer)
-        document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(x => x.classList.remove('active'));
-        document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
-        document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
-        document.getElementById('page-' + page).classList.add('active');
-        if (page === 'lucro')      renderLucro();
-        if (page === 'cotacoes')   iniciarCotacoes();
-        if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); else if(window._renderOperacoes) window._renderOperacoes(); }
+        navegarPara(page);
     });
 });
+
+// ── Navegação centralizada ───────────────────────────────────
+function navegarPara(page) {
+    sessionStorage.setItem('kroma_pagina', page);
+    document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    const sec = document.getElementById('page-' + page);
+    if (sec) sec.classList.add('active');
+    if (page === 'home')       renderHome();
+    if (page === 'lucro')      renderLucro();
+    if (page === 'cotacoes')   iniciarCotacoes();
+    if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); else if(window._renderOperacoes) window._renderOperacoes(); }
+    // Fecha drawer mobile se estiver aberto
+    const drawer = document.getElementById('nav-drawer');
+    const btn    = document.getElementById('nav-hamburger');
+    if (drawer) drawer.classList.remove('open');
+    if (btn)    btn.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+// ── Restaura última aba ao dar F5 ────────────────────────────
+(function() {
+    const paginaSalva = sessionStorage.getItem('kroma_pagina') || 'home';
+    navegarPara(paginaSalva);
+})();
 
 // ── HAMBURGUER MENU (MOBILE) ─────────────────────────────────
 (function() {
@@ -109,27 +142,23 @@ function salvarCadastros()     { localStorage.setItem('banco_cadastros',    JSON
 function salvarOperacoes()     { localStorage.setItem('banco_operacoes',    JSON.stringify(opOperacoes)); }
 function salvarFornecedores()  { localStorage.setItem('banco_fornecedores', JSON.stringify(cadFornecedores)); }
 
-// ── Saldo disponível por cotação (usado por Operações) ────────
-// Retorna quanto USDT ainda resta de cada compra, agrupado por cotação
-function saldoPorCotacao() {
-    // Constrói mapa de saldo disponível por ref de compra
-    const saldos = {};
-    // Parte de todas as compras do fornecedor (mais antigas primeiro)
-    [...opFornecedor].reverse().forEach(op => {
-        saldos[op.ref] = { cotacao: op.cotacao, fornecedor: op.fornecedor || '—', saldo: op.usdt, original: op.usdt };
-    });
-    // Desconta o que já foi vendido nas operações
-    opOperacoes.forEach(venda => {
-        if (venda.compraRef && saldos[venda.compraRef] !== undefined) {
-            saldos[venda.compraRef].saldo -= (venda.usdt || 0);
-        }
-    });
-    return saldos;
+// ── Saldo disponível ─────────────────────────────────────────
+// Total comprado no fornecedor menos total vendido nas operações
+function saldoTotalDisponivel() {
+    const totalComprado = opFornecedor.reduce((s, o) => s + (o.usdt || 0), 0);
+    const totalVendido  = opOperacoes.reduce((s, o) => s + (o.usdt  || 0), 0);
+    return Math.max(0, totalComprado - totalVendido);
 }
 
-// Saldo total disponível (soma de todas as compras menos vendas)
-function saldoTotalDisponivel() {
-    return Object.values(saldoPorCotacao()).reduce((s, v) => s + Math.max(0, v.saldo), 0);
+// Saldo por compra individual — para exibir na coluna da tabela fornecedor
+function saldoPorCompra(opRef) {
+    const compra    = opFornecedor.find(o => o.ref === opRef);
+    if (!compra) return 0;
+    // Desconta operações que referenciam essa compra pela cotação
+    const vendido = opOperacoes
+        .filter(v => v.cotCompra && Math.round(v.cotCompra * 10000) === Math.round(compra.cotacao * 10000))
+        .reduce((s, v) => s + (v.usdt || 0), 0);
+    return Math.max(0, compra.usdt - vendido);
 }
 
 // ============================================================
@@ -152,6 +181,80 @@ function initOperacoes() {
     renderTabelaOp();
     atualizarCardsOp();
     dragScroll(document.getElementById('drag-operacoes'));
+    iniciarTyping();
+}
+
+// ── Efeito de digitação no subtítulo ─────────────────────────
+function iniciarTyping() {
+    const el = document.getElementById('op-typing-text');
+    if (!el) return;
+
+    const frases = [
+        'Controle total das suas operações.',
+        'Gestão financeira simplificada.',
+        'Visão clara do seu lucro.',
+        'Spread calculado automaticamente.',
+        'A plataforma dos grandes operadores.',
+        'Saldos sempre atualizados.',
+        'Decisões mais inteligentes.',
+        'Conciliação ágil e precisa.',
+        'Sua operação em alto nível.',
+        'O futuro do OTC é aqui.',
+        'Eficiência operacional garantida.',
+        'Inteligência de mercado ao seu alcance.',
+        'A Suite FX que você precisa.',
+        'Segurança em cada transação.',
+        'Excelência em cada detalhe.',
+    ];
+
+    let fi = 0, ci = 0, apagando = false;
+    const VELOCIDADE_DIG  = 45;   // ms por letra digitando
+    const VELOCIDADE_APAG = 22;   // ms por letra apagando
+    const PAUSA_LEITURA   = 2200; // ms antes de apagar
+    const PAUSA_PROXIMA   = 400;  // ms antes de digitar próxima
+
+    function tick() {
+        const frase = frases[fi];
+        if (!apagando) {
+            if (ci <= frase.length) {
+                el.textContent = frase.slice(0, ci++);
+                setTimeout(tick, VELOCIDADE_DIG);
+            } else {
+                apagando = true;
+                setTimeout(tick, PAUSA_LEITURA);
+            }
+        } else {
+            if (ci > 0) {
+                el.textContent = frase.slice(0, --ci);
+                setTimeout(tick, VELOCIDADE_APAG);
+            } else {
+                apagando = false;
+                fi = (fi + 1) % frases.length;
+                setTimeout(tick, PAUSA_PROXIMA);
+            }
+        }
+    }
+    tick();
+}
+
+// ── Toggle glossário de status ───────────────────────────────
+function toggleGlossary() {
+    const panel = document.getElementById('sg-panel');
+    if (!panel) return;
+    const open = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+
+    // Fecha ao clicar fora
+    if (open) {
+        setTimeout(() => {
+            document.addEventListener('click', function handler(e) {
+                if (!document.getElementById('status-glossary')?.contains(e.target)) {
+                    panel.style.display = 'none';
+                    document.removeEventListener('click', handler);
+                }
+            });
+        }, 0);
+    }
 }
 
 // ── Adiciona linha nova ou com dados ──────────────────────────
@@ -192,9 +295,11 @@ function renderTabelaOp() {
     tb.innerHTML = '';
 
     const statusOpts = [
-        { v:'concluida', l:'Concluída',     cor:'#4CAF50' },
-        { v:'andamento', l:'Em Andamento',  cor:'#ffc107' },
-        { v:'cancelada', l:'Cancelada',     cor:'#ff5555' },
+        { v:'concluida',   l:'Settled',         cor:'#4CAF50' },
+        { v:'andamento',   l:'Processing',      cor:'#2196F3' },
+        { v:'falta_pagar', l:'Payment Pending', cor:'#ffc107' },
+        { v:'nos_devemos', l:'Asset Pending',   cor:'#ff9800' },
+        { v:'cancelada',   l:'Voided',          cor:'#ff5555' },
     ];
 
     const clientes = cadastrosCli.map(c => c.nome);
@@ -213,12 +318,12 @@ function renderTabelaOp() {
         tr.innerHTML = `
             <td>
                 <input class="cell-input op-data" data-ref="${op.ref}" data-field="data"
-                    value="${op.data}" style="width:90px;">
+                    value="${op.data}" style="width:100px;min-width:100px;">
             </td>
             <td>
                 <select class="cell-select op-status" data-ref="${op.ref}" data-field="status"
-                    style="color:${stOpt.cor};">
-                    ${statusOpts.map(s=>`<option value="${s.v}" ${op.status===s.v?'selected':''} style="color:${s.cor};">${s.l}</option>`).join('')}
+                    style="color:${stOpt.cor};font-weight:700;">
+                    ${statusOpts.map(s=>`<option value="${s.v}" ${op.status===s.v?'selected':''} style="color:${s.cor};font-weight:700;">${s.l}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -227,25 +332,26 @@ function renderTabelaOp() {
                     ${cliOpts}
                 </select>
             </td>
-            <td>
+            <td class="td-num">
                 <input class="cell-input op-usdt" data-ref="${op.ref}" data-field="usdt"
-                    value="${op.usdt ? fmtDisplay(op.usdt) : ''}" placeholder="0,00" style="text-align:right;">
+                    value="${op.usdt ? fmtDisplay(op.usdt) : ''}" placeholder="0,00"
+                    inputmode="numeric">
             </td>
-            <td>
+            <td class="td-num">
                 <input class="cell-input op-cot-compra" data-ref="${op.ref}" data-field="cotCompra"
-                    value="${op.cotCompra ? fmtCot(op.cotCompra) : ''}" placeholder="0,0000" style="text-align:right;">
+                    value="${op.cotCompra ? fmtCot(op.cotCompra) : ''}" placeholder="0,0000">
             </td>
-            <td>
+            <td class="td-num">
                 <input class="cell-input op-cot-venda" data-ref="${op.ref}" data-field="cotVenda"
-                    value="${op.cotVenda ? fmtCot(op.cotVenda) : ''}" placeholder="0,0000" style="text-align:right;">
+                    value="${op.cotVenda ? fmtCot(op.cotVenda) : ''}" placeholder="0,0000">
             </td>
-            <td style="text-align:right;color:#a0a0a0;padding:0 10px;">
+            <td class="td-num td-calc" style="padding-right:14px;">
                 ${op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—'}
             </td>
-            <td style="text-align:right;color:#a0a0a0;padding:0 10px;">
+            <td class="td-num td-calc" style="padding-right:14px;">
                 ${op.totalVenda ? 'R$ '+fmtDisplay(op.totalVenda) : '—'}
             </td>
-            <td style="text-align:right;font-weight:700;color:${corLucro};padding:0 10px;">
+            <td class="td-num td-calc" style="padding-right:14px;font-weight:700;color:${corLucro};">
                 ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
             </td>
             <td style="padding:0 8px;">
@@ -264,11 +370,39 @@ function renderTabelaOp() {
 
         // Eventos de edição inline
         tr.querySelectorAll('.cell-input').forEach(inp => {
-            inp.addEventListener('change', e => salvarCelulaOp(e.target));
-            inp.addEventListener('keydown', e => { if (e.key==='Enter') e.target.blur(); });
+            // Máscara USDT: formata ao sair do campo
+            if (inp.classList.contains('op-usdt')) {
+                inp.addEventListener('input', e => {
+                    // Remove tudo que não é número enquanto digita
+                    const raw = e.target.value.replace(/\D/g,'');
+                    e.target.value = raw;
+                });
+                inp.addEventListener('blur', e => {
+                    const raw = e.target.value.replace(/\D/g,'').replace(/^0+/,'') || '0';
+                    const num = parseFloat(raw) || 0;
+                    if (num > 0) e.target.value = fmtDisplay(num);
+                    salvarCelulaOp(e.target);
+                });
+                inp.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') e.target.blur();
+                });
+            } else {
+                inp.addEventListener('change', e => salvarCelulaOp(e.target));
+                inp.addEventListener('keydown', e => { if (e.key==='Enter') e.target.blur(); });
+            }
         });
         tr.querySelectorAll('.cell-select').forEach(sel => {
-            sel.addEventListener('change', e => salvarCelulaOp(e.target));
+            sel.addEventListener('change', e => {
+                // Atualiza cor do status imediatamente ao mudar
+                if (e.target.classList.contains('op-status')) {
+                    const cores = {
+                        concluida:'#4CAF50', andamento:'#2196F3',
+                        falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555'
+                    };
+                    e.target.style.color = cores[e.target.value] || '#e0e0e0';
+                }
+                salvarCelulaOp(e.target);
+            });
         });
 
         tb.appendChild(tr);
@@ -292,7 +426,10 @@ function salvarCelulaOp(el) {
 
     const op = opOperacoes[idx];
 
-    if (field === 'usdt' || field === 'cotCompra' || field === 'cotVenda') {
+    if (field === 'usdt') {
+        // Valor pode vir como "100.000,00" ou "100000"
+        op[field] = parseNum(el.value) || parseFloat(el.value.replace(/\./g,'').replace(',','.')) || 0;
+    } else if (field === 'cotCompra' || field === 'cotVenda') {
         op[field] = parseNum(el.value);
     } else {
         op[field] = el.value;
@@ -318,7 +455,8 @@ function salvarCelulaOp(el) {
         const corLucro = op.lucro > 0 ? '#4CAF50' : op.lucro < 0 ? '#ff5555' : '#888';
         cells[6].textContent = op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—';
         cells[7].textContent = op.totalVenda  ? 'R$ '+fmtDisplay(op.totalVenda)  : '—';
-        cells[8].style.color = corLucro;
+        cells[8].style.color      = corLucro;
+        cells[8].style.fontWeight = '700';
         cells[8].textContent = op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—';
         // Atualiza botão trava
         const btnDiv = cells[9].querySelector('div');
@@ -337,8 +475,11 @@ function salvarCelulaOp(el) {
         // Atualiza cor do status select
         const selStatus = tr.querySelector('.op-status');
         if (selStatus && field === 'status') {
-            const stOpts = { concluida:'#4CAF50', andamento:'#ffc107', cancelada:'#ff5555' };
-            selStatus.style.color = stOpts[op.status] || '#fff';
+            const stOpts = {
+                concluida:'#4CAF50', andamento:'#2196F3',
+                falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555'
+            };
+            selStatus.style.color = stOpts[op.status] || '#e0e0e0';
         }
     }
 
@@ -429,6 +570,82 @@ function exportarOpPDF() {
 window._renderOperacoes = renderTabelaOp;
 window._initOperacoes   = initOperacoes;
 
+
+// ============================================================
+// MÓDULO HOME
+// ============================================================
+function renderHome() {
+    // Greeting
+    const hora = new Date().getHours();
+    const greet = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+    const usuario = sessionStorage.getItem('kroma_usuario') || 'gestor';
+    const nome = usuario.charAt(0).toUpperCase() + usuario.slice(1);
+    const elG = document.getElementById('home-greeting');
+    if (elG) elG.textContent = `${greet}, ${nome}`;
+
+    const elD = document.getElementById('home-date');
+    if (elD) elD.textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+    // KPIs
+    const mesAtual   = new Date().toLocaleDateString('pt-BR').slice(3); // MM/YYYY
+    const opsMes     = opOperacoes.filter(o => o.data && o.data.slice(3) === mesAtual);
+    const lucroMes   = opsMes.reduce((s,o) => s + (o.lucro||0), 0);
+    const volumeMes  = opsMes.reduce((s,o) => s + (o.usdt||0), 0);
+    const saldoDisp  = saldoTotalDisponivel();
+    const opsAbertas = opOperacoes.filter(o => o.status === 'andamento' || o.status === 'falta_pagar').length;
+    const assetPend  = opOperacoes.filter(o => o.status === 'nos_devemos').reduce((s,o) => s+(o.usdt||0), 0);
+    const aPagarForn = Math.max(0, opFornecedor.reduce((s,o) => s+(o.totalBrl||0), 0) - opFornecedor.reduce((s,o) => s+(o.pix||0), 0));
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('home-saldo',        fmtDisplay(saldoDisp) + ' USDT');
+    set('home-volume-mes',   fmtDisplay(volumeMes) + ' USDT');
+    set('home-lucro-mes',    'R$ ' + fmtDisplay(lucroMes));
+    set('home-ops-abertas',  opsAbertas);
+    set('home-asset-pending', fmtDisplay(assetPend) + ' USDT');
+    set('home-a-pagar',      'R$ ' + fmtDisplay(aPagarForn));
+
+    // Tabela últimas operações (5 mais recentes com cliente)
+    const tbOps = document.getElementById('home-tabela-ops');
+    if (tbOps) {
+        const ultOps = opOperacoes.filter(o => o.cliente).slice(0, 5);
+        const statusCores = { concluida:'#4CAF50', andamento:'#2196F3', falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555' };
+        const statusNomes = { concluida:'Settled', andamento:'Processing', falta_pagar:'Payment Pending', nos_devemos:'Asset Pending', cancelada:'Voided' };
+        tbOps.innerHTML = ultOps.length ? ultOps.map(o => `
+            <tr>
+                <td style="padding:7px 10px;font-size:.82rem;">${o.data}</td>
+                <td style="padding:7px 10px;font-size:.82rem;font-weight:600;">${o.cliente}</td>
+                <td style="padding:7px 10px;font-size:.82rem;text-align:right;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:${(o.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
+                    ${o.lucro ? 'R$ '+fmtDisplay(o.lucro) : '—'}
+                </td>
+                <td style="padding:7px 10px;">
+                    <span style="font-size:.7rem;font-weight:700;color:${statusCores[o.status]||'#888'};">
+                        ${statusNomes[o.status]||o.status}
+                    </span>
+                </td>
+            </tr>`).join('')
+        : '<tr><td colspan="5" class="empty-state">Nenhuma operação ainda.</td></tr>';
+    }
+
+    // Tabela últimas compras fornecedor (5 mais recentes)
+    const tbComp = document.getElementById('home-tabela-compras');
+    if (tbComp) {
+        const ultComp = opFornecedor.slice(0, 5);
+        tbComp.innerHTML = ultComp.length ? ultComp.map(o => {
+            const saldo = saldoPorCompra(o.ref);
+            const corSaldo = saldo <= 0 ? '#4CAF50' : saldo < o.usdt ? '#ffc107' : '#a0a0a0';
+            return `
+            <tr>
+                <td style="padding:7px 10px;font-size:.82rem;">${o.data}</td>
+                <td style="padding:7px 10px;font-size:.82rem;">${o.fornecedor||'—'}</td>
+                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:#4CAF50;font-weight:700;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:7px 10px;font-size:.82rem;text-align:right;">R$ ${fmtCot(o.cotacao)}</td>
+                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:${corSaldo};font-weight:700;">${fmtDisplay(saldo)}</td>
+            </tr>`;
+        }).join('')
+        : '<tr><td colspan="5" class="empty-state">Nenhuma compra ainda.</td></tr>';
+    }
+}
 
 // ============================================================
 // MÓDULO A — FORNECEDOR
@@ -546,9 +763,6 @@ function carregarFornecedor() {
 
     opExibidas = filtroData ? opFornecedor.filter(o=>o.data===filtroData) : [...opFornecedor];
 
-    // Calcula saldo de cada compra (descontando vendas já feitas)
-    const saldos = saldoPorCotacao();
-
     tbHist.innerHTML = '';
     let totUsdt=0, totPendente=0, totBrl=0, totPix=0;
 
@@ -558,19 +772,19 @@ function carregarFornecedor() {
     }
 
     opExibidas.forEach(op => {
-        const idx         = opFornecedor.indexOf(op);
-        const saldoInfo   = saldos[op.ref] || {};
-        const saldoUsdt   = saldoInfo.saldo !== undefined ? Math.max(0, saldoInfo.saldo) : op.usdt;
-        const vendido     = op.usdt - saldoUsdt;
+        const idx      = opFornecedor.indexOf(op);
+        const saldoUsdt = saldoPorCompra(op.ref);
+        const pctUsado  = op.usdt > 0 ? (op.usdt - saldoUsdt) / op.usdt : 0;
 
         totUsdt     += op.usdt;
         totPendente += op.pendente;
         totBrl      += op.totalBrl;
         totPix      += op.pix;
 
-        const corSaldo = saldoUsdt <= 0 ? '#4CAF50' : saldoUsdt < op.usdt ? '#ffc107' : '#ff5555';
-        const refStr   = op.ref ? `<br><small style="color:#888;font-weight:normal;">${op.ref}</small>` : '';
-        const fornStr  = op.fornecedor ? `<br><small style="color:#888;">${op.fornecedor}</small>` : '';
+        // Verde = zerado (tudo vendido), amarelo = parcial, cinza = intacto
+        const corSaldo = saldoUsdt <= 0 ? '#4CAF50' : pctUsado > 0 ? '#ffc107' : '#a0a0a0';
+        const refStr   = op.ref ? `<br><small style="color:#555;font-weight:400;">${typeof op.ref === 'number' ? '' : op.ref}</small>` : '';
+        const fornStr  = op.fornecedor ? `<br><small style="color:#555;font-size:.75rem;">${op.fornecedor}</small>` : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${op.data}${fornStr}</td>
@@ -579,16 +793,16 @@ function carregarFornecedor() {
             <td>R$ ${fmtCot(op.cotacao)}</td>
             <td>R$ ${fmtDisplay(op.totalBrl)}</td>
             <td style="color:#2196F3;font-weight:700;">R$ ${fmtDisplay(op.pix)}${refStr}</td>
-            <td style="color:${corSaldo};font-weight:700;" title="Vendido: ${fmtDisplay(vendido)} USDT">
-                ${fmtDisplay(saldoUsdt)}
-                ${vendido>0?`<br><small style="color:#888;font-weight:normal;">Vendido: ${fmtDisplay(vendido)}</small>`:''}
-            </td>
+            <td style="color:${corSaldo};font-weight:700;">${fmtDisplay(saldoUsdt)}</td>
             <td style="color:${op.pendente<=0?'#4CAF50':'#ff5555'};font-weight:700;">${fmtDisplay(op.pendente)}</td>
-            <td style="display:flex;gap:6px;">
-                <button class="btn-small ok" ${op.pendente<=0?'disabled style="opacity:.3;cursor:not-allowed;"':''}>Receber</button>
-                <button class="btn-small del" title="Excluir">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
+            <td>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button class="btn-small ok" style="${op.pendente<=0?'opacity:.3;cursor:not-allowed;':''}"
+                        ${op.pendente<=0?'disabled':''}>Receber</button>
+                    <button class="btn-small del" title="Excluir">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
             </td>`;
 
         tr.querySelectorAll('button')[0].addEventListener('click', () => {
@@ -646,6 +860,7 @@ function carregarFornecedor() {
 }
 
 carregarFornecedor();
+renderHome();
 // ============================================================
 // MÓDULO B — CLIENTES
 // ============================================================
@@ -688,9 +903,25 @@ function carregarClientes() {
         return `${p[2]}/${p[1]}/${p[0]}`;
     })();
 
-    let dados = [...opClientes];
-    if (filtCli)  dados = dados.filter(o=>o.cliente===filtCli);
-    if (filtData) dados = dados.filter(o=>o.data===filtData);
+    // Usa opOperacoes como fonte principal do histórico
+    // Só mostra linhas que têm cliente preenchido
+    let dados = opOperacoes
+        .filter(o => o.cliente)
+        .map(o => ({
+            data:         o.data,
+            hora:         o.hora || '—',
+            cliente:      o.cliente,
+            usdt:         o.usdt || 0,
+            cotacaoVenda: o.cotVenda || 0,
+            totalBrl:     o.totalVenda || 0,
+            pagoBrl:      0, // campo futuro
+            statusEnvio:  o.status === 'nos_devemos' ? 'pendente' : (o.status === 'concluida' ? 'enviado' : 'pendente'),
+            lucro:        o.lucro || 0,
+            ref:          o.ref,
+        }));
+
+    if (filtCli)  dados = dados.filter(o => o.cliente === filtCli);
+    if (filtData) dados = dados.filter(o => o.data === filtData);
 
     tbClientes.innerHTML = '';
 
@@ -698,17 +929,28 @@ function carregarClientes() {
         tbClientes.innerHTML = '<tr><td colspan="10" class="empty-state">Nenhuma venda registrada ainda.</td></tr>';
     }
 
-    let totUsdt=0, totBrl=0, totPend=0;
+    // Status label e cor por status da operação
+    const statusMap = {
+        concluida:   { cls:'enviado',  txt:'Settled'         },
+        andamento:   { cls:'parcial',  txt:'Processing'      },
+        falta_pagar: { cls:'pendente', txt:'Payment Pending' },
+        nos_devemos: { cls:'pendente', txt:'Asset Pending'   },
+        cancelada:   { cls:'',         txt:'Voided'          },
+    };
+
+    let totUsdt=0, totVenda=0, totPend=0;
     dados.forEach(op => {
-        const idx = opClientes.indexOf(op);
-        totUsdt += op.usdt;
-        totBrl  += op.pagoBrl;
-        if (op.statusEnvio !== 'enviado') totPend += op.usdt;
+        totUsdt  += op.usdt || 0;
+        totVenda += op.totalBrl || 0;
+        // Card "Saldo a Enviar": só quando NÓS devemos ao cliente
+        if (op.statusEnvio === 'pendente') totPend += op.usdt || 0;
 
-        const badgeCls = op.statusEnvio==='enviado'?'enviado': op.statusEnvio==='parcial'?'parcial':'pendente';
-        const badgeTxt = op.statusEnvio==='enviado'?'Enviado': op.statusEnvio==='parcial'?'Parcial':'Pendente';
-
-        const saldo = getSaldoCliente(op.cliente);
+        const sm  = statusMap[op.status] || { cls:'pendente', txt: op.status };
+        const cor = op.status === 'concluida' ? '#4CAF50'
+                  : op.status === 'nos_devemos' ? '#ff9800'
+                  : op.status === 'falta_pagar' ? '#ffc107'
+                  : op.status === 'cancelada'   ? '#ff5555'
+                  : '#2196F3';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -716,39 +958,27 @@ function carregarClientes() {
             <td>${op.hora}</td>
             <td style="font-weight:600;">${op.cliente}</td>
             <td style="color:#4CAF50;font-weight:700;">${fmtDisplay(op.usdt)}</td>
-            <td>R$ ${fmtCot(op.cotacaoVenda)}</td>
-            <td>R$ ${fmtDisplay(op.totalBrl)}</td>
-            <td style="color:#2196F3;font-weight:700;">R$ ${fmtDisplay(op.pagoBrl)}</td>
-            <td style="color:#ffc107;font-weight:700;">${fmtDisplay(saldo)}</td>
-            <td><span class="badge-status ${badgeCls}">${badgeTxt}</span></td>
-            <td style="display:flex;gap:5px;">
-                <button class="btn-small ok">Enviar</button>
-                <button class="btn-small del" title="Excluir"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            </td>`;
-
-        tr.querySelectorAll('button')[0].addEventListener('click', ()=>{
-            const novoStatus = op.statusEnvio==='enviado'?'pendente':'enviado';
-            opClientes[idx].statusEnvio = novoStatus;
-            salvarClientes();
-            carregarClientes();
-            toast(novoStatus==='enviado'?'Marcado como Enviado.':'Revertido para Pendente.');
-        });
-        tr.querySelectorAll('button')[1].addEventListener('click', ()=>{
-            if (confirm('Excluir esta venda?')) {
-                opClientes.splice(idx,1);
-                salvarClientes();
-                carregarClientes();
-                toast('Venda excluída.', 'error');
-            }
-        });
+            <td>${op.cotacaoVenda ? 'R$ '+fmtCot(op.cotacaoVenda) : '—'}</td>
+            <td>${op.totalBrl ? 'R$ '+fmtDisplay(op.totalBrl) : '—'}</td>
+            <td style="color:${op.lucro>0?'#4CAF50':'#888'};font-weight:700;">
+                ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
+            </td>
+            <td>
+                <span class="badge-status ${sm.cls}" style="color:${cor};background:${cor}22;border-color:${cor}44;">
+                    ${sm.txt}
+                </span>
+            </td>
+            <td>—</td>`;
         tbClientes.appendChild(tr);
     });
 
     // Cards
-    document.getElementById('cli-total-clientes').textContent = cadastrosCli.length;
-    document.getElementById('cli-vol-usdt').textContent = fmtDisplay(opClientes.reduce((a,o)=>a+o.usdt,0));
-    document.getElementById('cli-vol-brl').textContent  = 'R$ '+fmtDisplay(opClientes.reduce((a,o)=>a+o.pagoBrl,0));
-    document.getElementById('cli-pendente-usdt').textContent = fmtDisplay(opClientes.filter(o=>o.statusEnvio!=='enviado').reduce((a,o)=>a+o.usdt,0));
+    const pendOps = opOperacoes.filter(o => o.cliente && o.status === 'nos_devemos');
+    const pendUsdt = pendOps.reduce((a,o) => a+(o.usdt||0), 0);
+    document.getElementById('cli-total-clientes').textContent   = cadastrosCli.length;
+    document.getElementById('cli-vol-usdt').textContent         = fmtDisplay(totUsdt);
+    document.getElementById('cli-vol-brl').textContent          = 'R$ '+fmtDisplay(totVenda);
+    document.getElementById('cli-pendente-usdt').textContent    = fmtDisplay(pendUsdt);
 }
 
 if (filtroCliHist) filtroCliHist.addEventListener('change', carregarClientes);
@@ -882,57 +1112,48 @@ function iniciarCotacoes() {
     cotacoesIniciadas = true;
     buscarCotacao();
     buscarVelas();
-    setInterval(buscarCotacao, 15000);
-    setInterval(buscarVelas,  300000); // atualiza velas a cada 5 min
+    setInterval(buscarCotacao, 5000);   // 5 segundos
+    setInterval(buscarVelas,  300000);  // velas a cada 5 min
 }
 
-// ── Cotação USDT/BRL — BCB (USD/BRL) × Binance (USDT/USD) ──────
-// Fórmula: USDT/BRL = USD/BRL × USDT/USD  (igual ao TradingView)
+// ── Cotação USDT/BRL — mesma fórmula do TradingView ────────────
+// Fonte 1: Coinbase (USDT/USD) × Frankfurter (USD/BRL) — tempo real
+// Fonte 2: Binance USDTBRL — fallback
 async function buscarCotacao() {
     try {
-        // Busca USD/BRL do BCB e USDT/USD da Binance em paralelo
-        const [rBcb, rBin] = await Promise.all([
-            fetch(`https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@d)?@d='${bcbDataHoje()}'&$top=1&$orderby=dataHoraCotacao%20desc&$format=json&$select=cotacaoCompra,cotacaoVenda`),
-            fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTUSDT').catch(()=>null)
+        // Busca USDT/USD na Coinbase (gratuita, sem chave, tempo real)
+        // e USD/BRL no Frankfurter (Banco Central Europeu — tempo real)
+        const [rCoinbase, rFx] = await Promise.all([
+            fetch('https://api.coinbase.com/v2/prices/USDT-USD/spot'),
+            fetch('https://api.frankfurter.app/latest?from=USD&to=BRL'),
         ]);
 
-        const dBcb = await rBcb.json();
-        if (!dBcb.value || !dBcb.value.length) throw new Error('BCB sem dados');
+        const dCoinbase = await rCoinbase.json();
+        const dFx       = await rFx.json();
 
-        const usdBrl = (parseFloat(dBcb.value[0].cotacaoCompra) + parseFloat(dBcb.value[0].cotacaoVenda)) / 2;
+        const usdtUsd = parseFloat(dCoinbase.data.amount);   // USDT em dólar
+        const usdBrl  = parseFloat(dFx.rates.BRL);           // dólar em real
 
-        // USDT/USD — normalmente ~1.0000 mas pode variar levemente
-        let usdtUsd = 1.0;
-        if (rBin) {
-            try {
-                // USDTUSDT não existe — usa BTCUSDT/BTCUSDT proxy ou assume 1.0
-                // Melhor: busca USDT na Binance diretamente
-                const rb2 = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDCUSDT');
-                // USDC≈USDT, ambos ≈1 USD. Usar como proxy do USDT/USD
-                const db2 = await rb2.json();
-                usdtUsd = parseFloat(db2.price) || 1.0;
-            } catch(_) { usdtUsd = 1.0; }
-        }
+        if (!usdtUsd || !usdBrl) throw new Error('Dados inválidos');
 
-        cotacaoAtual = usdBrl * usdtUsd;
+        cotacaoAtual = usdtUsd * usdBrl;
 
-        // Variação % via Binance USDTBRL
+        // Variação 24h via Binance (só para o % — não afeta o preço)
         let pctChg = 0, lo = cotacaoAtual * 0.998, hi = cotacaoAtual * 1.002;
         try {
-            const rb3 = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-            const db3 = await rb3.json();
-            pctChg = parseFloat(db3.priceChangePercent) || 0;
-            const binLo = parseFloat(db3.lowPrice);
-            const binHi = parseFloat(db3.highPrice);
-            // Binance low/high podem estar invertidos (valor < 1)
-            lo = binLo > 1 ? binLo : usdBrl * 0.998;
-            hi = binHi > 1 ? binHi : usdBrl * 1.002;
+            const rb = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+            const db = await rb.json();
+            pctChg = parseFloat(db.priceChangePercent) || 0;
+            const binLo = parseFloat(db.lowPrice);
+            const binHi = parseFloat(db.highPrice);
+            lo = binLo > 1 ? binLo : lo;
+            hi = binHi > 1 ? binHi : hi;
         } catch(_) {}
 
-        atualizarHeroCotacao(cotacaoAtual, lo, hi, pctChg, 'BCB × Binance · USDT/BRL');
+        atualizarHeroCotacao(cotacaoAtual, lo, hi, pctChg, 'Coinbase × Frankfurter');
 
     } catch(e) {
-        // Fallback: só Binance com correção
+        // Fallback: Binance USDTBRL direto
         try {
             const rb = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
             const db = await rb.json();
@@ -948,17 +1169,6 @@ async function buscarCotacao() {
             document.getElementById('ultimo-update').textContent = 'Erro ao obter cotação';
         }
     }
-}
-
-// Retorna data útil mais recente no formato MM-DD-YYYY (padrão BCB)
-function bcbDataHoje() {
-    const d = new Date();
-    const dow = d.getDay();
-    if (dow === 0) d.setDate(d.getDate() - 2); // domingo → sexta
-    if (dow === 6) d.setDate(d.getDate() - 1); // sábado → sexta
-    const dd   = String(d.getDate()).padStart(2,'0');
-    const mm   = String(d.getMonth()+1).padStart(2,'0');
-    return `${mm}-${dd}-${d.getFullYear()}`;
 }
 
 function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
