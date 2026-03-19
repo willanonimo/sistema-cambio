@@ -1380,16 +1380,60 @@ function calcularSpread() {
 // ── Copiar cotação com spread ─────────────────────────────────
 function copiarCotacao() {
     const el = document.getElementById('calc-preco-final');
-    const texto = el.textContent.replace('R$ ', '').trim();
-    if (!texto || texto === '—') { toast('Nenhuma cotação para copiar.', 'error'); return; }
-    navigator.clipboard.writeText('R$ ' + texto).then(() => {
-        const btn = document.getElementById('btn-copiar-cotacao');
-        const svgOriginal = btn.innerHTML;
-        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-        btn.style.borderColor = '#4CAF50';
-        setTimeout(() => { btn.innerHTML = svgOriginal; btn.style.borderColor = ''; }, 2000);
-        toast('Cotação copiada: R$ ' + texto);
-    }).catch(() => toast('Não foi possível copiar.', 'error'));
+    const texto = el?.textContent.replace('R$ ','').trim();
+    if (!texto || texto === '—') { toast('Calcule o spread primeiro.','error'); return; }
+    navigator.clipboard.writeText(texto)
+        .then(() => toast('Número copiado! ✓'))
+        .catch(() => toast('Não foi possível copiar.','error'));
+}
+
+function gerarPrintCotacao() {
+    const precoEl = document.getElementById('calc-preco-final');
+    const mercEl  = document.getElementById('calc-mercado');
+    if (!precoEl || precoEl.textContent === '—') { toast('Calcule o spread primeiro.','error'); return; }
+
+    const card = document.getElementById('cotacao-print-card');
+    document.getElementById('print-preco').textContent   = precoEl.textContent;
+    document.getElementById('print-mercado').textContent = mercEl?.textContent || '—';
+    document.getElementById('print-hora').textContent    =
+        new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+    card.style.cssText = 'display:block;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:440px;background:#0d0d0d;border:1px solid #2e2e2e;border-radius:16px;padding:32px 36px;font-family:Inter,sans-serif;box-shadow:0 24px 60px rgba(0,0,0,.8);';
+
+    let overlay = document.getElementById('print-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'print-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9998;';
+        document.body.appendChild(overlay);
+    } else {
+        overlay.style.display = 'block';
+    }
+    overlay.onclick = () => { card.style.display='none'; overlay.style.display='none'; };
+
+    let saveBtn = document.getElementById('print-save-btn');
+    if (!saveBtn) {
+        saveBtn = document.createElement('button');
+        saveBtn.id = 'print-save-btn';
+        saveBtn.innerHTML = '&#x1F4E5; Salvar como imagem';
+        saveBtn.style.cssText = 'display:block;width:100%;margin-top:24px;background:#4CAF50;color:#000;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;';
+        card.appendChild(saveBtn);
+    }
+    saveBtn.onclick = () => {
+        if (typeof html2canvas !== 'undefined') {
+            html2canvas(card, {backgroundColor:'#0d0d0d', scale:2}).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'axone-cotacao.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                card.style.display = 'none';
+                overlay.style.display = 'none';
+                toast('Print salvo! ✓');
+            });
+        } else {
+            window.print();
+        }
+    };
 }
 
 // ── Modal compartilhar ────────────────────────────────────────
@@ -1410,7 +1454,10 @@ function copiarLink() {
 }
 
 function abrirPaginaCliente() {
-    window.open('cotacao-cliente.html', '_blank');
+    const spread = document.getElementById('calc-spread-input')?.value || '0';
+    const url    = `cotacao-cliente.html?spread=${encodeURIComponent(spread)}`;
+    window.open(url, '_blank');
+    fecharModal();
 }
 
 // Fechar modal clicando fora
