@@ -24,27 +24,30 @@
 
     <!-- Desktop links (visível só em 900px+) -->
     <div class="nav-links">
+        <a href="#" data-page="operacoes">Operações</a>
         <a href="#" class="active" data-page="fornecedor">Fornecedor</a>
         <a href="#" data-page="clientes">Clientes</a>
         <a href="#" data-page="lucro">Dashboard Lucro</a>
         <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
     </div>
 
-    <!-- Ticker único — visível sempre, CSS controla o que mostra dentro -->
-    <div class="live-ticker" id="nav-ticker" style="margin-left:auto;">
-        <div class="dot"></div>
-        <span class="label">USDT/BRL</span>
-        <span class="price" id="ticker-price">—</span>
-        <span class="change" id="ticker-change"></span>
-    </div>
-
-    <!-- User + logout — só desktop via CSS -->
+    <!-- Desktop: ticker + user + logout agrupados à direita -->
     <div class="nav-right-desktop">
+        <div class="live-ticker" id="nav-ticker">
+            <div class="dot"></div>
+            <span class="label">USDT/BRL</span>
+            <span class="price" id="ticker-price">—</span>
+            <span class="change" id="ticker-change"></span>
+        </div>
         <span class="nav-user">Olá, <strong id="nome-usuario">Gestor</strong></span>
         <button class="btn-logout" onclick="logout()">Sair</button>
     </div>
 
-    <!-- Hamburguer — só mobile -->
+    <!-- Mobile: ticker compacto + hamburguer -->
+    <div class="live-ticker live-ticker-mobile" id="nav-ticker-mobile">
+        <div class="dot"></div>
+        <span class="price" id="ticker-price-mobile">—</span>
+    </div>
     <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
         <span></span><span></span><span></span>
     </button>
@@ -52,6 +55,7 @@
 
 <!-- Drawer mobile -->
 <div class="nav-drawer" id="nav-drawer">
+    <a href="#" data-page="operacoes">Operações</a>
     <a href="#" class="active" data-page="fornecedor">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Fornecedor
@@ -104,10 +108,36 @@
                 <div class="value">Enviado: <span id="card-pagar-enviado">R$ 0,00</span></div>
                 <div class="subtitle" style="color:#ff5555;">Pendente a enviar: <span id="card-pagar-pendente">R$ 0,00</span></div>
             </div>
+            <div class="card highlight">
+                <h3>Saldo Disponível</h3>
+                <div class="value" id="card-saldo-disponivel">0,00 USDT</div>
+                <div class="subtitle">USDT em estoque (não vendido)</div>
+            </div>
         </div>
 
         <!-- Formulário Fornecedor -->
         <div class="op-card">
+
+            <!-- Bloco 0: Fornecedor -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="1"/></svg>
+                Fornecedor
+            </div>
+            <div class="form-grid" style="margin-bottom:16px;">
+                <div class="input-group">
+                    <label>Selecionar Fornecedor</label>
+                    <select id="select-fornecedor"><option value="">— Selecione —</option></select>
+                </div>
+                <div class="input-group">
+                    <label>Cadastrar Novo Fornecedor</label>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" placeholder="Nome do fornecedor" id="input-novo-fornecedor" style="flex:1;">
+                        <button class="btn-secondary" id="btn-add-fornecedor" style="padding:0 16px;white-space:nowrap;font-size:.82rem;">+ Adicionar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-divider"></div>
 
             <!-- Bloco 1: Compra -->
             <div class="form-section-label">
@@ -168,12 +198,12 @@
             <div class="table-responsive" id="drag-fornecedor">
                 <table>
                     <thead><tr>
-                        <th>Data</th><th>Hora</th><th>USDT Comprado</th>
+                        <th>Data / Fornecedor</th><th>Hora</th><th>USDT Comprado</th>
                         <th>Cotação</th><th>Total (R$)</th><th>Valor Pago</th>
-                        <th>Falta Receber</th><th>Ações</th>
+                        <th>Saldo Disponível</th><th>Falta Receber</th><th>Ações</th>
                     </tr></thead>
                     <tbody id="tabela-historico">
-                        <tr><td colspan="8" class="empty-state">Nenhuma operação registrada ainda.</td></tr>
+                        <tr><td colspan="9" class="empty-state">Nenhuma operação registrada ainda.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -207,84 +237,28 @@
             </div>
         </div>
 
-        <!-- Formulário novo cliente / nova operação -->
+        <!-- Cadastro de clientes -->
         <div class="op-card">
-            <div class="tabs">
-                <button class="tab-btn active" id="tab-nova-op">Nova Operação</button>
-                <button class="tab-btn" id="tab-cadastro">Cadastrar Cliente</button>
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Cadastrar Cliente
             </div>
-
-            <!-- Painel: Nova Operação Cliente -->
-            <div id="painel-nova-op">
-                <div class="form-grid">
-                    <div class="input-group">
-                        <label>Cliente</label>
-                        <select id="cli-select">
-                            <option value="">— Selecione o cliente —</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label>USDT Vendido</label>
-                        <input type="text" placeholder="0,00" id="cli-usdt">
-                    </div>
-                    <div class="input-group">
-                        <label>Cotação de Venda (R$)</label>
-                        <input type="text" placeholder="0,00" id="cli-cotacao-venda">
-                    </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Nome Completo</label>
+                    <input type="text" placeholder="Ex: João da Silva" id="cad-nome">
                 </div>
-                <div class="form-grid">
-                    <div class="input-group">
-                        <label>Total a Receber do Cliente (R$)</label>
-                        <input type="text" placeholder="0,00" id="cli-total-brl" disabled>
-                    </div>
-                    <div class="input-group">
-                        <label>Valor Pago pelo Cliente (R$)</label>
-                        <input type="text" placeholder="0,00" id="cli-pago-brl">
-                    </div>
-                    <div class="input-group">
-                        <label>Status do Envio de USDT</label>
-                        <select id="cli-status-envio">
-                            <option value="pendente">Pendente</option>
-                            <option value="parcial">Parcial</option>
-                            <option value="enviado">Enviado</option>
-                        </select>
-                    </div>
+                <div class="input-group">
+                    <label>Contato (WhatsApp / e-mail)</label>
+                    <input type="text" placeholder="Ex: (11) 9 9999-0000" id="cad-contato">
                 </div>
-                <div class="form-grid">
-                    <div class="input-group">
-                        <label>Referência / Observação</label>
-                        <input type="text" placeholder="Ex: Lote 05 - Carteira XYZ" id="cli-ref">
-                    </div>
-                    <div class="input-group">
-                        <label>Saldo USDT do Cliente Conosco</label>
-                        <input type="text" placeholder="Calculado automaticamente" id="cli-saldo-display" disabled>
-                    </div>
-                </div>
-                <div class="action-row">
-                    <button class="btn-primary" id="btn-registrar-cliente">Registrar Venda</button>
-                    <button class="btn-danger"  id="btn-cancelar-cliente"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar</button>
+                <div class="input-group">
+                    <label>Observação</label>
+                    <input type="text" placeholder="Ex: Cliente VIP" id="cad-obs">
                 </div>
             </div>
-
-            <!-- Painel: Cadastro -->
-            <div id="painel-cadastro" style="display:none;">
-                <div class="form-grid">
-                    <div class="input-group">
-                        <label>Nome Completo</label>
-                        <input type="text" placeholder="Ex: João da Silva" id="cad-nome">
-                    </div>
-                    <div class="input-group">
-                        <label>Contato (WhatsApp / e-mail)</label>
-                        <input type="text" placeholder="Ex: (11) 9 9999-0000" id="cad-contato">
-                    </div>
-                    <div class="input-group">
-                        <label>Observação</label>
-                        <input type="text" placeholder="Ex: Cliente VIP" id="cad-obs">
-                    </div>
-                </div>
-                <div class="action-row">
-                    <button class="btn-primary" id="btn-cadastrar-cliente">Cadastrar</button>
-                </div>
+            <div class="action-row" style="margin-top:20px;">
+                <button class="btn-primary" id="btn-cadastrar-cliente">Cadastrar</button>
             </div>
         </div>
 
@@ -497,6 +471,79 @@
         </div>
 
     </section>
+
+
+    <!-- ═══════════════ OPERAÇÕES ═══════════════ -->
+    <section class="page-section" id="page-operacoes">
+        <div class="section-header">
+            <div>
+                <h1>Operações</h1>
+                <p>Clique em qualquer célula para editar</p>
+            </div>
+            <div class="header-actions" style="display:flex;gap:10px;">
+                <button class="btn-secondary" id="btn-exportar-op" style="font-size:.82rem;padding:8px 16px;">Exportar PDF</button>
+            </div>
+        </div>
+
+        <!-- Cards resumo -->
+        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Saldo Disponível</h3>
+                <div class="value" style="color:#2196F3;" id="op-card-saldo">0,00 USDT</div>
+                <div class="subtitle">USDT em estoque para vender</div>
+            </div>
+            <div class="card highlight">
+                <h3>Lucro Total</h3>
+                <div class="value" id="op-card-lucro">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado</div>
+            </div>
+            <div class="card">
+                <h3>Volume USDT</h3>
+                <div class="value" id="op-card-volume">0,00 USDT</div>
+                <div class="subtitle">Total negociado</div>
+            </div>
+            <div class="card">
+                <h3>Spread Médio</h3>
+                <div class="value" id="op-card-spread">R$ 0,0000</div>
+                <div class="subtitle">Por USDT negociado</div>
+            </div>
+        </div>
+
+        <!-- Tabela estilo Excel -->
+        <div class="table-card" style="margin-top:24px;">
+            <div class="table-responsive" id="drag-operacoes">
+                <table id="tabela-op-excel">
+                    <thead>
+                        <tr>
+                            <th style="width:100px;">Data</th>
+                            <th style="width:140px;">Status</th>
+                            <th style="width:150px;">Cliente</th>
+                            <th style="width:130px;">Valor USDT</th>
+                            <th style="width:130px;">Cot. Compra</th>
+                            <th style="width:130px;">Cot. Venda</th>
+                            <th style="width:130px;">Total Compra</th>
+                            <th style="width:130px;">Total Venda</th>
+                            <th style="width:120px;">Lucro</th>
+                            <th style="width:60px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-operacoes">
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="10" style="padding:10px 12px;">
+                                <button class="btn-secondary" id="btn-nova-linha-op" style="font-size:.82rem;padding:7px 18px;display:flex;align-items:center;gap:6px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Nova Linha
+                                </button>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </section>
+
 
 </div><!-- /main-content -->
 
