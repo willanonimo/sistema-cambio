@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kroma Capital | FX Suite</title>
+    <title>GênesiX | FX Suite</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -17,8 +17,8 @@
     <div class="nav-logo">
         <div class="line"></div>
         <div>
-            <div class="kroma">KROMA</div>
-            <div class="cap">CAPITAL</div>
+            <div class="kroma">GênesiX</div>
+            <div class="cap">FX SUITE</div>
         </div>
     </div>
 
@@ -507,15 +507,9 @@
             </div>
         </div>
 
-        <!-- Gráfico de Velas — USDT/BRL histórico diário -->
-        <div class="chart-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-                <h3 style="margin:0;">Histórico USDT/BRL — Velas Diárias (30 dias)</h3>
-                <span style="font-size:.78rem;color:#555;" id="grafico-fonte">Fonte: AwesomeAPI · Dólar Comercial</span>
-            </div>
-            <div class="chart-wrap" style="height:340px;">
-                <canvas id="grafico-cotacao"></canvas>
-            </div>
+        <!-- Gráfico TradingView — USDT/BRL ao vivo -->
+        <div class="chart-card" style="padding:0;overflow:hidden;border-radius:12px;min-height:460px;">
+            <div id="tv-chart-container" style="width:100%;height:460px;"></div>
         </div>
 
         <!-- Modal compartilhar -->
