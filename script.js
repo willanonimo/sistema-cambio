@@ -1,5 +1,5 @@
 // ============================================================
-// GênesiX — FX MANAGEMENT SUITE  |  script.js v2.0
+// AXONE — FX MANAGEMENT SUITE  |  script.js v2.0
 // ============================================================
 
 // ── 0. AUTH ─────────────────────────────────────────────────
@@ -541,7 +541,7 @@ function exportarOpPDF() {
     const pw  = doc.internal.pageSize.getWidth();
 
     doc.setFontSize(16); doc.setFont('helvetica','bold');
-    doc.text('GênesiX — Operações', pw/2, 20, {align:'center'});
+    doc.text('AXONE — Operações', pw/2, 20, {align:'center'});
     doc.setFontSize(10); doc.setFont('helvetica','normal');
     doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, 28, {align:'center'});
     const totalLucro = opOperacoes.reduce((s,o)=>s+(o.lucro||0),0);
@@ -563,7 +563,7 @@ function exportarOpPDF() {
         headStyles: { fillColor:[30,30,30], textColor:[200,200,200] },
         alternateRowStyles: { fillColor:[245,245,245] },
     });
-    doc.save('genesix-operacoes.pdf');
+    doc.save('axone-operacoes.pdf');
 }
 
 // Expõe para navegação
