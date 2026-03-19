@@ -1149,23 +1149,41 @@ function iniciarWidgetTV() {
 }
 
 async function buscarCotacaoSimples() {
+    // Binance funciona sem CORS — mesma fonte da cotacao-cliente.html
     try {
-        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache: 'no-store' });
+        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+        if (!r.ok) throw new Error('Binance ' + r.status);
         const d = await r.json();
-        const bid  = parseFloat(d.USDTBRL.bid);
-        const high = parseFloat(d.USDTBRL.high);
-        const low  = parseFloat(d.USDTBRL.low);
-        const pct  = parseFloat(d.USDTBRL.pctChange) || 0;
+        let preco = parseFloat(d.lastPrice);
+        // Binance às vezes retorna invertido (< 1)
+        if (preco < 1 && preco > 0) preco = 1 / preco;
+        if (preco < 3) throw new Error('Valor suspeito: ' + preco);
+
+        const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
+        const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
+        const pct = parseFloat(d.priceChangePercent) || 0;
+
+        cotacaoAtual = preco;
+        atualizarHeroCotacao(preco, lo, hi, pct, 'Binance · USDT/BRL');
+        return;
+    } catch(_) {}
+
+    // Fallback: AwesomeAPI
+    try {
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
+        const d = await r.json();
+        const bid = parseFloat(d.USDTBRL.bid);
         if (bid > 1) {
             cotacaoAtual = bid;
-            atualizarHeroCotacao(bid, low, high, pct, 'AwesomeAPI · USDT/BRL');
+            atualizarHeroCotacao(bid,
+                parseFloat(d.USDTBRL.low),
+                parseFloat(d.USDTBRL.high),
+                parseFloat(d.USDTBRL.pctChange) || 0,
+                'AwesomeAPI · USDT/BRL');
         }
-    } catch(_) {
-        // silencioso — widget TV já mostra o gráfico
-    }
+    } catch(_) {}
 }
 
-// buscarCotacao alias para compatibilidade
 function buscarCotacao() { buscarCotacaoSimples(); }
 
 function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
