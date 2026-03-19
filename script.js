@@ -1100,7 +1100,7 @@ function renderLucro() {
 }
 
 // ============================================================
-// MÓDULO D — COTAÇÕES AO VIVO (COM PAR SINTÉTICO AXONE)
+// MÓDULO D — COTAÇÕES AO VIVO (OTIMIZADO COM PAR SINTÉTICO)
 // ============================================================
 let cotacaoAtual      = 0;
 let cotacoesIniciadas = false;
@@ -1110,13 +1110,13 @@ function iniciarCotacoes() {
     cotacoesIniciadas = true;
     
     iniciarWidgetTV();
-    buscarCotacaoSimples();
+    buscarCotacaoSintetica();
     
-    // Atualiza a cada 10 segundos
-    setInterval(buscarCotacaoSimples, 10000);
+    // Atualiza a cada 5 segundos para refletir o mercado cripto
+    setInterval(buscarCotacaoSintetica, 5000);
 }
 
-// ── 1. Widget TradingView (Com o seu Ticker Exclusivo) ──────
+// ── 1. Widget TradingView (O Gráfico Profissional) ───────────
 function iniciarWidgetTV() {
     const chartContainer = document.getElementById('tv-chart-container');
     if (!chartContainer || chartContainer.dataset.loaded) return;
@@ -1128,8 +1128,8 @@ function iniciarWidgetTV() {
         if (typeof TradingView === 'undefined') return;
         new TradingView.widget({
             "autosize": true,
-            // AQUI ESTÁ A CHAVE DE OURO QUE VOCÊ ME PASSOU:
-            "symbol": "FX_IDC:USDBRL*BITSTAMP:USDTUSD*1.0000", 
+            // AQUI ESTÁ O SEU PAR SINTÉTICO INSTITUCIONAL:
+            "symbol": "FX_IDC:USDBRL*BITSTAMP:USDTUSD", 
             "interval": "60", 
             "timezone": "America/Sao_Paulo",
             "theme": "dark",
@@ -1147,25 +1147,40 @@ function iniciarWidgetTV() {
     document.body.appendChild(script);
 }
 
-// ── 2. Motor de Cotação de Texto (Amigável para PC Local) ───
-async function buscarCotacaoSimples() {
-    // Usamos a AwesomeAPI porque ela não bloqueia arquivos locais (CORS)
+// ── 2. Motor de Cotação Numérica (O Preço do Topo da Tela) ───
+// Para o número ficar igual ao gráfico, precisamos recriar a mesma matemática
+async function buscarCotacaoSintetica() {
     try {
-        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
-        if (r.ok) {
-            const d = await r.json();
-            let preco = parseFloat(d.USDBRL.bid);
-            if (preco > 1) {
-                atualizarDadosCotacao(preco, parseFloat(d.USDBRL.low), parseFloat(d.USDBRL.high), parseFloat(d.USDBRL.pctChange), 'AwesomeAPI · Dólar (USDT/BRL)');
-                return;
-            }
+        // Passo A: Pegamos o Dólar Comercial exato via AwesomeAPI
+        const rDolar = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
+        const dDolar = await rDolar.json();
+        const dolarBRL = parseFloat(dDolar.USDBRL.bid);
+        const dolarVar = parseFloat(dDolar.USDBRL.pctChange); // Pegamos a variação do Dólar para mostrar a seta
+
+        // Passo B: Pegamos o valor do USDT em Dólares via Bitstamp (como no seu TradingView)
+        const rTether = await fetch('https://www.bitstamp.net/api/v2/ticker/usdtusd/');
+        const dTether = await rTether.json();
+        const usdtUSD = parseFloat(dTether.last);
+
+        // Passo C: A Mágica do Par Sintético (Multiplicação)
+        if (dolarBRL > 0 && usdtUSD > 0) {
+            let precoSintetico = dolarBRL * usdtUSD;
+            
+            // Calculamos mínimos e máximos projetados
+            let minSintetico = parseFloat(dDolar.USDBRL.low) * parseFloat(dTether.low);
+            let maxSintetico = parseFloat(dDolar.USDBRL.high) * parseFloat(dTether.high);
+
+            atualizarDadosCotacao(precoSintetico, minSintetico, maxSintetico, dolarVar, 'AXONE Sintético (USDBRL x USDTUSD)');
+            return;
         }
-    } catch(e) { console.warn('Falha na API primária.', e); }
+    } catch(e) { 
+        console.warn('Falha na matemática sintética.', e); 
+    }
 
     if (cotacaoAtual === 0) {
-        document.getElementById('cot-preco-principal').textContent = 'Erro de Conexão';
-        document.getElementById('ultimo-update').textContent = 'Sem sinal de rede...';
-        document.getElementById('ultimo-update').style.color = '#ff5555';
+        document.getElementById('cot-preco-principal').textContent = 'Conectando...';
+        document.getElementById('ultimo-update').textContent = 'Buscando liquidez...';
+        document.getElementById('ultimo-update').style.color = '#ffc107'; // Amarelo de alerta
     }
 }
 
@@ -1176,7 +1191,7 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
 
     const elVar = document.getElementById('cot-variacao');
     if (pctChg !== 0) {
-        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% nas últimas 24h';
+        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% (Variação USD)';
         elVar.className   = 'ch-change ' + (pctChg >= 0 ? 'up' : 'down');
     } else {
         elVar.textContent = '';
@@ -1199,7 +1214,7 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
         elTChange.className   = 'change ' + (pctChg >= 0 ? 'up' : 'down');
     }
 
-    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
     document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
     document.getElementById('ultimo-update').style.color = '#a0a0a0'; 
 
