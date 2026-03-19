@@ -503,5 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sec = document.getElementById('page-cotacoes');
     if (sec && sec.classList.contains('active')) {
         iniciarCotacoes();
+        buscarCotacao();
+        buscarVelas();
     }
 });
