@@ -1107,12 +1107,11 @@ let graficoCotacao    = null;
 let cotacoesIniciadas = false;
 let velasData         = []; // dados do gráfico de velas
 
-// ── fetch seguro ─────────────────────────────────────────────
-async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.json();
-}
+// ── URL do proxy — troque pela URL do Render após o deploy ────
+// Enquanto estiver no Live Server local, usa localhost:3000
+const PROXY_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000/cotacao'
+    : 'https://kroma-proxy.onrender.com/cotacao'; // ← substitua pela sua URL do Render
 
 function iniciarCotacoes() {
     if (cotacoesIniciadas) return;
@@ -1123,57 +1122,39 @@ function iniciarCotacoes() {
     setInterval(buscarVelas,  300000);  // velas a cada 5 min
 }
 
-// ── Cotação USDT/BRL — fórmula idêntica ao TradingView ────────
-// USDBRL (AwesomeAPI) × USDTUSD (Bitstamp) = FX_IDC:USDBRL × BITSTAMP:USDTUSD
+// ── Cotação USDT/BRL via proxy (sem CORS) ─────────────────────
 async function buscarCotacao() {
     try {
-        const [usd, usdt] = await Promise.all([
-            fetchJSON('https://economia.awesomeapi.com.br/json/last/USD-BRL'),
-            fetchJSON('https://www.bitstamp.net/api/v2/ticker/usdtusd/'),
-        ]);
+        const res = await fetch(PROXY_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Proxy HTTP ' + res.status);
+        const d = await res.json();
+        if (!d.preco || d.preco < 1) throw new Error('Preço inválido');
 
-        const usdbrl  = parseFloat(usd.USDBRL.bid);
-        const usdtusd = parseFloat(usdt.last);
-        if (!usdbrl || !usdtusd) throw new Error('Valores inválidos');
-
-        const preco = usdbrl * usdtusd;
-        const high  = parseFloat(usd.USDBRL.high) * usdtusd;
-        const low   = parseFloat(usd.USDBRL.low)  * usdtusd;
-        const pct   = parseFloat(usd.USDBRL.pctChange) || 0;
-
-        cotacaoAtual = preco;
-        atualizarHeroCotacao(preco, low, high, pct, 'USD/BRL × USDT/USD');
+        cotacaoAtual = d.preco;
+        atualizarHeroCotacao(d.preco, d.low, d.high, d.pct, d.fonte);
 
     } catch(e) {
-        // Fallback: AwesomeAPI USDT-BRL direto
+        // Fallback direto: AwesomeAPI USDT-BRL (funciona às vezes dependendo do browser/rede)
         try {
-            const d    = await fetchJSON('https://economia.awesomeapi.com.br/json/last/USDT-BRL');
-            const bid  = parseFloat(d.USDTBRL.bid);
-            const high = parseFloat(d.USDTBRL.high);
-            const low  = parseFloat(d.USDTBRL.low);
-            const pct  = parseFloat(d.USDTBRL.pctChange) || 0;
+            const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
+            const d = await r.json();
+            const bid = parseFloat(d.USDTBRL.bid);
             if (bid > 1) {
                 cotacaoAtual = bid;
-                atualizarHeroCotacao(bid, low, high, pct, 'AwesomeAPI · USDT/BRL');
+                atualizarHeroCotacao(bid,
+                    parseFloat(d.USDTBRL.low),
+                    parseFloat(d.USDTBRL.high),
+                    parseFloat(d.USDTBRL.pctChange) || 0,
+                    'AwesomeAPI · USDT/BRL'
+                );
                 return;
             }
         } catch(_) {}
 
-        // Fallback final: Binance
-        try {
-            const d   = await fetchJSON('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-            let preco = parseFloat(d.lastPrice);
-            if (preco < 1) preco = 1 / preco;
-            const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
-            const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
-            if (preco > 1) {
-                cotacaoAtual = preco;
-                atualizarHeroCotacao(preco, lo, hi, parseFloat(d.priceChangePercent)||0, 'Binance · USDT/BRL');
-            }
-        } catch(_) {
-            const el = document.getElementById('cot-preco-principal');
-            if (el) el.textContent = 'Indisponível';
-        }
+        const el = document.getElementById('cot-preco-principal');
+        if (el) el.textContent = 'Indisponível';
+        const elU = document.getElementById('ultimo-update');
+        if (elU) elU.textContent = 'Proxy offline — configure o Render';
     }
 }
 
