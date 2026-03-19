@@ -1100,22 +1100,23 @@ function renderLucro() {
 }
 
 // ============================================================
-// MÓDULO D — COTAÇÕES AO VIVO
+// MÓDULO D — COTAÇÕES AO VIVO (BLINDADO E OTIMIZADO)
 // ============================================================
 let cotacaoAtual      = 0;
-let graficoCotacao    = null;
 let cotacoesIniciadas = false;
-let velasData         = []; // dados do gráfico de velas
 
 function iniciarCotacoes() {
     if (cotacoesIniciadas) return;
     cotacoesIniciadas = true;
+    
     iniciarWidgetTV();
-    buscarVelas();
-    setInterval(buscarVelas, 300000);
+    buscarCotacaoSimples();
+    
+    // Atualiza a cotação a cada 10 segundos automaticamente
+    setInterval(buscarCotacaoSimples, 10000);
 }
 
-// ── Widget TradingView — gráfico de velas ─────────────────────
+// ── 1. Widget TradingView (Gráfico Oficial Institucional) ────
 function iniciarWidgetTV() {
     const chartContainer = document.getElementById('tv-chart-container');
     if (!chartContainer || chartContainer.dataset.loaded) return;
@@ -1126,67 +1127,64 @@ function iniciarWidgetTV() {
     script.onload = () => {
         if (typeof TradingView === 'undefined') return;
         new TradingView.widget({
-            autosize:         true,
-            symbol:           'FX_IDC:USDBRL',
-            interval:         'D',
-            timezone:         'America/Sao_Paulo',
-            theme:            'dark',
-            style:            '1',
-            locale:           'br',
-            toolbar_bg:       '#111',
-            backgroundColor:  'rgba(13,13,13,1)',
-            hide_top_toolbar: false,
-            hide_legend:      false,
-            save_image:       false,
-            container_id:     'tv-chart-container',
+            "autosize": true,
+            "symbol": "BINANCE:USDTBRL", // O par exato para mesas de OTC
+            "interval": "60", // Gráfico de 1 hora
+            "timezone": "America/Sao_Paulo",
+            "theme": "dark",
+            "style": "1", // Estilo Velas Japonesas
+            "locale": "br",
+            "enable_publishing": false,
+            "backgroundColor": "rgba(13, 13, 13, 1)", // Fundo Chumbo Axone
+            "gridColor": "rgba(255, 255, 255, 0.05)",
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "save_image": false,
+            "container_id": "tv-chart-container"
         });
     };
     document.body.appendChild(script);
-
-    // Preço numérico via AwesomeAPI
-    buscarCotacaoSimples();
-    setInterval(buscarCotacaoSimples, 10000);
 }
 
+// ── 2. Motor de Cotação (Blindado com Fallbacks) ─────────────
 async function buscarCotacaoSimples() {
-    // Binance funciona sem CORS — mesma fonte da cotacao-cliente.html
+    // Tentativa 1: Binance (Foco em USDT/BRL - Balcão Real)
     try {
         const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
-        if (!r.ok) throw new Error('Binance ' + r.status);
-        const d = await r.json();
-        let preco = parseFloat(d.lastPrice);
-        // Binance às vezes retorna invertido (< 1)
-        if (preco < 1 && preco > 0) preco = 1 / preco;
-        if (preco < 3) throw new Error('Valor suspeito: ' + preco);
-
-        const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
-        const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
-        const pct = parseFloat(d.priceChangePercent) || 0;
-
-        cotacaoAtual = preco;
-        atualizarHeroCotacao(preco, lo, hi, pct, 'Binance · USDT/BRL');
-        return;
-    } catch(_) {}
-
-    // Fallback: AwesomeAPI
-    try {
-        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
-        const d = await r.json();
-        const bid = parseFloat(d.USDTBRL.bid);
-        if (bid > 1) {
-            cotacaoAtual = bid;
-            atualizarHeroCotacao(bid,
-                parseFloat(d.USDTBRL.low),
-                parseFloat(d.USDTBRL.high),
-                parseFloat(d.USDTBRL.pctChange) || 0,
-                'AwesomeAPI · USDT/BRL');
+        if (r.ok) {
+            const d = await r.json();
+            let preco = parseFloat(d.lastPrice);
+            if (preco > 1) {
+                atualizarDadosCotacao(preco, parseFloat(d.lowPrice), parseFloat(d.highPrice), parseFloat(d.priceChangePercent), 'Binance · USDT/BRL');
+                return;
+            }
         }
-    } catch(_) {}
+    } catch(e) { console.warn('Binance falhou, tentando fallback...'); }
+
+    // Tentativa 2: AwesomeAPI (USD Comercial - Segurança Total)
+    try {
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
+        if (r.ok) {
+            const d = await r.json();
+            let preco = parseFloat(d.USDBRL.bid);
+            if (preco > 1) {
+                atualizarDadosCotacao(preco, parseFloat(d.USDBRL.low), parseFloat(d.USDBRL.high), parseFloat(d.USDBRL.pctChange), 'AwesomeAPI · Dólar Comercial');
+                return;
+            }
+        }
+    } catch(e) { console.warn('AwesomeAPI falhou, exibindo erro.'); }
+
+    // Se a internet do cliente cair ou todas as APIs falharem (Evita tela de "Carregando" eterna)
+    if (cotacaoAtual === 0) {
+        document.getElementById('cot-preco-principal').textContent = 'Erro de Conexão';
+        document.getElementById('ultimo-update').textContent = 'Sem sinal de rede...';
+        document.getElementById('ultimo-update').style.color = '#ff5555';
+    }
 }
 
-function buscarCotacao() { buscarCotacaoSimples(); }
-
-function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
+// ── 3. Atualização de Tela ───────────────────────────────────
+function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
+    cotacaoAtual = preco;
     document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(preco);
 
     const elVar = document.getElementById('cot-variacao');
@@ -1203,9 +1201,11 @@ function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
     const elFonte = document.getElementById('cot-fonte');
     if (elFonte) elFonte.textContent = fonte;
 
+    // Atualiza os Tickers no Topo do Site (A barra de navegação)
     const elTPrice  = document.getElementById('ticker-price');
     const elTChange = document.getElementById('ticker-change');
     const elTMobile = document.getElementById('ticker-price-mobile');
+    
     if (elTPrice)  elTPrice.textContent  = 'R$ ' + fmtCot(preco);
     if (elTMobile) elTMobile.textContent = 'R$ ' + fmtCot(preco);
     if (elTChange && pctChg !== 0) {
@@ -1215,146 +1215,12 @@ function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
 
     const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
+    document.getElementById('ultimo-update').style.color = '#a0a0a0'; // Volta pro cinza se estava vermelho
 
-    calcularSpread();
+    calcularSpread(); // Aciona a calculadora com o preço novo
 }
 
-// ── Velas USDT/BRL — BCB histórico diário × fator USDT/USD ────
-async function buscarVelas() {
-    try {
-        const fim = new Date();
-        const ini = new Date(); ini.setDate(ini.getDate() - 50);
-
-        const fmtBcb = d => {
-            const dd   = String(d.getDate()).padStart(2,'0');
-            const mm   = String(d.getMonth()+1).padStart(2,'0');
-            return `${mm}-${dd}-${d.getFullYear()}`;
-        };
-
-        const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@di,dataFinalCotacao=@df)?@di='${fmtBcb(ini)}'&@df='${fmtBcb(fim)}'&$top=200&$orderby=dataHoraCotacao%20asc&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`;
-
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('BCB error');
-        const d = await r.json();
-        const itens = d.value;
-        if (!itens || !itens.length) throw new Error('Sem dados BCB');
-
-        // Agrupa por dia (formato dataHoraCotacao: "YYYY-MM-DD HH:MM:SS.mmm")
-        const porDia = {};
-        itens.forEach(item => {
-            // Extrai só a data "YYYY-MM-DD"
-            const dia = item.dataHoraCotacao.substring(0, 10);
-            if (!porDia[dia]) porDia[dia] = [];
-            const med = (parseFloat(item.cotacaoCompra) + parseFloat(item.cotacaoVenda)) / 2;
-            porDia[dia].push(med);
-        });
-
-        const dias = Object.keys(porDia).sort().slice(-30);
-
-        velasData = dias.map((dia, i) => {
-            const vals  = porDia[dia];
-            const close = vals[vals.length - 1];
-            const open  = i > 0 ? porDia[dias[i-1]][porDia[dias[i-1]].length - 1] : vals[0];
-            const high  = Math.max(...vals);
-            const low   = Math.min(...vals);
-            // Formata label DD/MM
-            const partes = dia.split('-');
-            return { t: `${partes[2]}/${partes[1]}`, open, high, low, close };
-        });
-
-        renderVelas();
-    } catch(e) {
-        console.warn('Erro velas BCB:', e);
-    }
-}
-
-// ── Gráfico de Velas Japonesas (Candlestick) ──────────────────
-function renderVelas() {
-    const ctx = document.getElementById('grafico-cotacao');
-    if (!ctx) return;
-    if (graficoCotacao) { graficoCotacao.destroy(); graficoCotacao = null; }
-    if (!velasData.length) return;
-
-    const labels     = velasData.map(v => v.t);
-    const corVela    = velasData.map(v => v.close >= v.open ? 'rgba(76,175,80,0.85)'  : 'rgba(255,85,85,0.85)');
-    const corBorda   = velasData.map(v => v.close >= v.open ? '#4CAF50' : '#ff5555');
-
-    // Corpo: base = min(open,close), altura = |close - open|
-    const corpoBase  = velasData.map(v => Math.min(v.open, v.close));
-    const corpoAlto  = velasData.map(v => Math.max(0.0001, Math.abs(v.close - v.open)));
-
-    // Pavio inferior: low → min(open,close)
-    const pavInfBase = velasData.map(v => v.low);
-    const pavInfAlto = velasData.map(v => Math.max(0, Math.min(v.open, v.close) - v.low));
-
-    // Pavio superior: max(open,close) → high
-    const pavSupBase = velasData.map(v => Math.max(v.open, v.close));
-    const pavSupAlto = velasData.map(v => Math.max(0, v.high - Math.max(v.open, v.close)));
-
-    graficoCotacao = new Chart(ctx.getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Corpo',
-                    data: corpoAlto, base: corpoBase,
-                    backgroundColor: corVela, borderColor: corBorda,
-                    borderWidth: 1, borderRadius: 1, barPercentage: 0.55,
-                },
-                {
-                    label: 'Pavio Inf',
-                    data: pavInfAlto, base: pavInfBase,
-                    backgroundColor: corBorda, borderColor: corBorda,
-                    borderWidth: 1, barPercentage: 0.07,
-                },
-                {
-                    label: 'Pavio Sup',
-                    data: pavSupAlto, base: pavSupBase,
-                    backgroundColor: corBorda, borderColor: corBorda,
-                    borderWidth: 1, barPercentage: 0.07,
-                }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1a1a1a', borderColor: '#333', borderWidth: 1,
-                    titleColor: '#a0a0a0', bodyColor: '#e0e0e0', padding: 12,
-                    callbacks: {
-                        title: items => 'USDT/BRL — ' + labels[items[0].dataIndex],
-                        label: item => {
-                            if (item.datasetIndex !== 0) return null;
-                            const v = velasData[item.dataIndex];
-                            return [
-                                ` Abertura:    R$ ${fmtCot(v.open)}`,
-                                ` Fechamento:  R$ ${fmtCot(v.close)}`,
-                                ` Máxima:      R$ ${fmtCot(v.high)}`,
-                                ` Mínima:      R$ ${fmtCot(v.low)}`,
-                            ];
-                        },
-                        filter: item => item.datasetIndex === 0,
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    stacked: false,
-                    grid:  { color: 'rgba(255,255,255,.04)' },
-                    ticks: { color: '#555', maxTicksLimit: 12, font: { size: 11 } }
-                },
-                y: {
-                    grid:  { color: 'rgba(255,255,255,.04)' },
-                    ticks: { color: '#888', font: { size: 11 }, callback: v => 'R$ ' + fmtCot(v) }
-                }
-            }
-        }
-    });
-}
-
-// ── Calculadora de Spread (simplificada) ─────────────────────
+// ── 4. Calculadora de Spread ─────────────────────────────────
 function calcularSpread() {
     const elMercado = document.getElementById('calc-mercado');
     const elFinal   = document.getElementById('calc-preco-final');
@@ -1369,15 +1235,15 @@ function calcularSpread() {
         const precoFinal = cotacaoAtual * (1 + spreadPct / 100);
         const spreadRs   = precoFinal - cotacaoAtual;
 
-        elFinal.textContent   = 'R$ ' + fmtCot(precoFinal);
+        elFinal.textContent    = 'R$ ' + fmtCot(precoFinal);
         elSpreadRs.textContent = 'R$ ' + fmtCot(spreadRs);
     } else {
-        elFinal.textContent   = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
+        elFinal.textContent    = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
         elSpreadRs.textContent = '—';
     }
 }
 
-// ── Copiar cotação com spread ─────────────────────────────────
+// ── 5. Ferramentas de Cópia e Exportação (Mantidas Intactas) ──
 function copiarCotacao() {
     const el = document.getElementById('calc-preco-final');
     const texto = el?.textContent.replace('R$ ','').trim();
@@ -1396,7 +1262,6 @@ function gerarPrintCotacao() {
     const mercado = mercEl?.textContent || '—';
     const hora    = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
-    // Abre nova janela com o print profissional
     const w = window.open('','_blank','width=540,height=400');
     w.document.write(`<!DOCTYPE html>
 <html>
@@ -1442,16 +1307,17 @@ function gerarPrintCotacao() {
     w.document.close();
 }
 
-// ── Modal compartilhar ────────────────────────────────────────
-document.getElementById('btn-abrir-share').addEventListener('click', () => {
+// ── 6. Modais ────────────────────────────────────────────────
+document.getElementById('btn-abrir-share')?.addEventListener('click', () => {
     const url = window.location.href.replace(/[^/]*$/, '') + 'cotacao-cliente.html';
     document.getElementById('link-cliente-url').textContent = url;
     const modal = document.getElementById('modal-share');
-    modal.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
 });
 
 function fecharModal() {
-    document.getElementById('modal-share').style.display = 'none';
+    const modal = document.getElementById('modal-share');
+    if (modal) modal.style.display = 'none';
 }
 
 function copiarLink() {
@@ -1466,12 +1332,11 @@ function abrirPaginaCliente() {
     fecharModal();
 }
 
-// Fechar modal clicando fora
-document.getElementById('modal-share').addEventListener('click', function(e) {
+document.getElementById('modal-share')?.addEventListener('click', function(e) {
     if (e.target === this) fecharModal();
 });
 
-// ── UTIL: DRAG TO SCROLL ────────────────────────────────────
+// ── 7. UTIL: DRAG TO SCROLL ──────────────────────────────────
 function dragScroll(el) {
     if (!el) return;
     let down=false, sx, sl;
