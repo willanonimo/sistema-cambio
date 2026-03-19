@@ -1,5 +1,5 @@
 // ============================================================
-// KROMA CAPITAL — FX MANAGEMENT SUITE  |  script.js v2.0
+// GênesiX — FX MANAGEMENT SUITE  |  script.js v2.0
 // ============================================================
 
 // ── 0. AUTH ─────────────────────────────────────────────────
@@ -541,7 +541,7 @@ function exportarOpPDF() {
     const pw  = doc.internal.pageSize.getWidth();
 
     doc.setFontSize(16); doc.setFont('helvetica','bold');
-    doc.text('Kroma Capital — Operações', pw/2, 20, {align:'center'});
+    doc.text('GênesiX — Operações', pw/2, 20, {align:'center'});
     doc.setFontSize(10); doc.setFont('helvetica','normal');
     doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, 28, {align:'center'});
     const totalLucro = opOperacoes.reduce((s,o)=>s+(o.lucro||0),0);
@@ -563,7 +563,7 @@ function exportarOpPDF() {
         headStyles: { fillColor:[30,30,30], textColor:[200,200,200] },
         alternateRowStyles: { fillColor:[245,245,245] },
     });
-    doc.save('kroma-operacoes.pdf');
+    doc.save('genesix-operacoes.pdf');
 }
 
 // Expõe para navegação
@@ -1107,56 +1107,84 @@ let graficoCotacao    = null;
 let cotacoesIniciadas = false;
 let velasData         = []; // dados do gráfico de velas
 
-// ── URL do proxy — troque pela URL do Render após o deploy ────
-// Enquanto estiver no Live Server local, usa localhost:3000
-const PROXY_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000/cotacao'
-    : 'https://kroma-proxy.onrender.com/cotacao'; // ← substitua pela sua URL do Render
-
 function iniciarCotacoes() {
     if (cotacoesIniciadas) return;
     cotacoesIniciadas = true;
-    buscarCotacao();
+    iniciarWidgetTV();
     buscarVelas();
-    setInterval(buscarCotacao, 5000);   // 5 segundos
-    setInterval(buscarVelas,  300000);  // velas a cada 5 min
+    setInterval(buscarVelas, 300000);
 }
 
-// ── Cotação USDT/BRL via proxy (sem CORS) ─────────────────────
-async function buscarCotacao() {
+// ── Cotação via widget TradingView embutido ───────────────────
+// Sem API, sem CORS — funciona sempre
+function iniciarWidgetTV() {
+    const container = document.getElementById('tv-widget-container');
+    if (!container || container.dataset.loaded) return;
+    container.dataset.loaded = '1';
+
+    // Widget de ticker para pegar o preço atual
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+        symbol:   'FX_IDC:USDBRL',
+        width:    '100%',
+        locale:   'br',
+        colorTheme: 'dark',
+        isTransparent: true,
+    });
+    container.appendChild(script);
+
+    // Widget de gráfico de velas
+    const chartContainer = document.getElementById('tv-chart-container');
+    if (chartContainer && !chartContainer.dataset.loaded) {
+        chartContainer.dataset.loaded = '1';
+        const s2 = document.createElement('script');
+        s2.src = 'https://s3.tradingview.com/tv.js';
+        s2.onload = () => {
+            new TradingView.widget({
+                autosize: true,
+                symbol: 'FX_IDC:USDBRL',
+                interval: 'D',
+                timezone: 'America/Sao_Paulo',
+                theme: 'dark',
+                style: '1',
+                locale: 'br',
+                toolbar_bg: '#0d0d0d',
+                backgroundColor: 'rgba(13,13,13,1)',
+                hide_top_toolbar: false,
+                hide_legend: false,
+                save_image: false,
+                container_id: 'tv-chart-container',
+            });
+        };
+        document.head.appendChild(s2);
+    }
+
+    // Atualiza o hero com preço via AwesomeAPI (fallback se widget não atualizar)
+    buscarCotacaoSimples();
+    setInterval(buscarCotacaoSimples, 10000);
+}
+
+async function buscarCotacaoSimples() {
     try {
-        const res = await fetch(PROXY_URL, { cache: 'no-store' });
-        if (!res.ok) throw new Error('Proxy HTTP ' + res.status);
-        const d = await res.json();
-        if (!d.preco || d.preco < 1) throw new Error('Preço inválido');
-
-        cotacaoAtual = d.preco;
-        atualizarHeroCotacao(d.preco, d.low, d.high, d.pct, d.fonte);
-
-    } catch(e) {
-        // Fallback direto: AwesomeAPI USDT-BRL (funciona às vezes dependendo do browser/rede)
-        try {
-            const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
-            const d = await r.json();
-            const bid = parseFloat(d.USDTBRL.bid);
-            if (bid > 1) {
-                cotacaoAtual = bid;
-                atualizarHeroCotacao(bid,
-                    parseFloat(d.USDTBRL.low),
-                    parseFloat(d.USDTBRL.high),
-                    parseFloat(d.USDTBRL.pctChange) || 0,
-                    'AwesomeAPI · USDT/BRL'
-                );
-                return;
-            }
-        } catch(_) {}
-
-        const el = document.getElementById('cot-preco-principal');
-        if (el) el.textContent = 'Indisponível';
-        const elU = document.getElementById('ultimo-update');
-        if (elU) elU.textContent = 'Proxy offline — configure o Render';
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache: 'no-store' });
+        const d = await r.json();
+        const bid  = parseFloat(d.USDTBRL.bid);
+        const high = parseFloat(d.USDTBRL.high);
+        const low  = parseFloat(d.USDTBRL.low);
+        const pct  = parseFloat(d.USDTBRL.pctChange) || 0;
+        if (bid > 1) {
+            cotacaoAtual = bid;
+            atualizarHeroCotacao(bid, low, high, pct, 'AwesomeAPI · USDT/BRL');
+        }
+    } catch(_) {
+        // silencioso — widget TV já mostra o gráfico
     }
 }
+
+// buscarCotacao alias para compatibilidade
+function buscarCotacao() { buscarCotacaoSimples(); }
 
 function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
     document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(preco);
