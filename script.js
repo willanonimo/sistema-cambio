@@ -1115,53 +1115,35 @@ function iniciarCotacoes() {
     setInterval(buscarVelas, 300000);
 }
 
-// ── Cotação via widget TradingView embutido ───────────────────
-// Sem API, sem CORS — funciona sempre
+// ── Widget TradingView — gráfico de velas ─────────────────────
 function iniciarWidgetTV() {
-    const container = document.getElementById('tv-widget-container');
-    if (!container || container.dataset.loaded) return;
-    container.dataset.loaded = '1';
-
-    // Widget de ticker para pegar o preço atual
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js';
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-        symbol:   'FX_IDC:USDBRL',
-        width:    '100%',
-        locale:   'br',
-        colorTheme: 'dark',
-        isTransparent: true,
-    });
-    container.appendChild(script);
-
-    // Widget de gráfico de velas
     const chartContainer = document.getElementById('tv-chart-container');
-    if (chartContainer && !chartContainer.dataset.loaded) {
-        chartContainer.dataset.loaded = '1';
-        const s2 = document.createElement('script');
-        s2.src = 'https://s3.tradingview.com/tv.js';
-        s2.onload = () => {
-            new TradingView.widget({
-                autosize: true,
-                symbol: 'FX_IDC:USDBRL',
-                interval: 'D',
-                timezone: 'America/Sao_Paulo',
-                theme: 'dark',
-                style: '1',
-                locale: 'br',
-                toolbar_bg: '#0d0d0d',
-                backgroundColor: 'rgba(13,13,13,1)',
-                hide_top_toolbar: false,
-                hide_legend: false,
-                save_image: false,
-                container_id: 'tv-chart-container',
-            });
-        };
-        document.head.appendChild(s2);
-    }
+    if (!chartContainer || chartContainer.dataset.loaded) return;
+    chartContainer.dataset.loaded = '1';
 
-    // Atualiza o hero com preço via AwesomeAPI (fallback se widget não atualizar)
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.onload = () => {
+        if (typeof TradingView === 'undefined') return;
+        new TradingView.widget({
+            autosize:         true,
+            symbol:           'FX_IDC:USDBRL',
+            interval:         'D',
+            timezone:         'America/Sao_Paulo',
+            theme:            'dark',
+            style:            '1',
+            locale:           'br',
+            toolbar_bg:       '#111',
+            backgroundColor:  'rgba(13,13,13,1)',
+            hide_top_toolbar: false,
+            hide_legend:      false,
+            save_image:       false,
+            container_id:     'tv-chart-container',
+        });
+    };
+    document.body.appendChild(script);
+
+    // Preço numérico via AwesomeAPI
     buscarCotacaoSimples();
     setInterval(buscarCotacaoSimples, 10000);
 }
@@ -1392,48 +1374,54 @@ function gerarPrintCotacao() {
     const mercEl  = document.getElementById('calc-mercado');
     if (!precoEl || precoEl.textContent === '—') { toast('Calcule o spread primeiro.','error'); return; }
 
-    const card = document.getElementById('cotacao-print-card');
-    document.getElementById('print-preco').textContent   = precoEl.textContent;
-    document.getElementById('print-mercado').textContent = mercEl?.textContent || '—';
-    document.getElementById('print-hora').textContent    =
-        new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const preco   = precoEl.textContent;
+    const mercado = mercEl?.textContent || '—';
+    const hora    = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
-    card.style.cssText = 'display:block;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;width:440px;background:#0d0d0d;border:1px solid #2e2e2e;border-radius:16px;padding:32px 36px;font-family:Inter,sans-serif;box-shadow:0 24px 60px rgba(0,0,0,.8);';
-
-    let overlay = document.getElementById('print-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'print-overlay';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9998;';
-        document.body.appendChild(overlay);
-    } else {
-        overlay.style.display = 'block';
-    }
-    overlay.onclick = () => { card.style.display='none'; overlay.style.display='none'; };
-
-    let saveBtn = document.getElementById('print-save-btn');
-    if (!saveBtn) {
-        saveBtn = document.createElement('button');
-        saveBtn.id = 'print-save-btn';
-        saveBtn.innerHTML = '&#x1F4E5; Salvar como imagem';
-        saveBtn.style.cssText = 'display:block;width:100%;margin-top:24px;background:#4CAF50;color:#000;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;';
-        card.appendChild(saveBtn);
-    }
-    saveBtn.onclick = () => {
-        if (typeof html2canvas !== 'undefined') {
-            html2canvas(card, {backgroundColor:'#0d0d0d', scale:2}).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'axone-cotacao.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-                card.style.display = 'none';
-                overlay.style.display = 'none';
-                toast('Print salvo! ✓');
-            });
-        } else {
-            window.print();
-        }
-    };
+    // Abre nova janela com o print profissional
+    const w = window.open('','_blank','width=540,height=400');
+    w.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AXONE — Cotação</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d0d0d; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:Inter,sans-serif; }
+  .card { background:#111; border:1px solid #222; border-radius:16px; padding:40px 48px; width:460px; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; padding-bottom:20px; border-bottom:1px solid #1e1e1e; }
+  .logo-name { font-size:1.2rem; font-weight:700; letter-spacing:5px; color:#fff; }
+  .logo-sub  { font-size:.6rem; letter-spacing:3px; color:#444; margin-top:3px; }
+  .hora      { font-size:.72rem; color:#444; text-align:right; }
+  .label     { font-size:.65rem; letter-spacing:.14em; color:#444; text-transform:uppercase; margin-bottom:10px; }
+  .preco     { font-size:3.2rem; font-weight:700; color:#fff; letter-spacing:-1px; line-height:1; }
+  .footer    { display:flex; justify-content:space-between; margin-top:28px; padding-top:18px; border-top:1px solid #1a1a1a; font-size:.72rem; color:#444; }
+  .footer span b { color:#777; }
+  .btn { display:block; width:100%; margin-top:24px; background:#4CAF50; color:#000; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:.88rem; cursor:pointer; font-family:Inter,sans-serif; letter-spacing:.04em; }
+  @media print { .btn { display:none; } body { background:#fff; } .card { border:none; background:#fff; } .logo-name,.preco { color:#000; } .label,.hora,.footer { color:#888; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div>
+      <div class="logo-name">AXONE</div>
+      <div class="logo-sub">FX SUITE</div>
+    </div>
+    <div class="hora">${hora}</div>
+  </div>
+  <div class="label">USDT / BRL — Cotação de Venda</div>
+  <div class="preco">${preco}</div>
+  <div class="footer">
+    <span>Mercado: <b>${mercado}</b></span>
+    <span>Válido por 30 segundos</span>
+  </div>
+  <button class="btn" onclick="window.print()">Imprimir / Salvar PDF</button>
+</div>
+</body>
+</html>`);
+    w.document.close();
 }
 
 // ── Modal compartilhar ────────────────────────────────────────
