@@ -24,8 +24,10 @@
 
     <!-- Desktop links (visível só em 900px+) -->
     <div class="nav-links">
-        <a href="#" data-page="operacoes">Operações</a>
-        <a href="#" class="active" data-page="fornecedor">Fornecedor</a>
+        <a href="#" class="active" data-page="home">Home</a>
+        <a href="#" class="active" data-page="home">Home</a>
+    <a href="#" data-page="operacoes">Operações</a>
+        <a href="#" data-page="fornecedor">Fornecedor</a>
         <a href="#" data-page="clientes">Clientes</a>
         <a href="#" data-page="lucro">Dashboard Lucro</a>
         <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
@@ -55,8 +57,10 @@
 
 <!-- Drawer mobile -->
 <div class="nav-drawer" id="nav-drawer">
+    <a href="#" class="active" data-page="home">Home</a>
+        <a href="#" class="active" data-page="home">Home</a>
     <a href="#" data-page="operacoes">Operações</a>
-    <a href="#" class="active" data-page="fornecedor">
+    <a href="#" data-page="fornecedor">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Fornecedor
     </a>
@@ -83,7 +87,91 @@
 <div class="main-content">
 
     <!-- ─── PÁGINA 1: FORNECEDOR ──────────── -->
-    <section class="page-section active" id="page-fornecedor">
+    <!-- ═══════════════ HOME ═══════════════ -->
+    <section class="page-section active" id="page-home">
+        <div class="section-header">
+            <div>
+                <h1 id="home-greeting">Bem-vindo</h1>
+                <p id="home-date"></p>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:24px;">
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
+                <h3>Saldo Disponível</h3>
+                <div class="value" style="color:#4CAF50;" id="home-saldo">0,00 USDT</div>
+                <div class="subtitle">USDT em estoque para vender</div>
+            </div>
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Volume do Mês</h3>
+                <div class="value" style="color:#2196F3;" id="home-volume-mes">0,00 USDT</div>
+                <div class="subtitle">Total negociado no mês atual</div>
+            </div>
+            <div class="card highlight">
+                <h3>Lucro do Mês</h3>
+                <div class="value" id="home-lucro-mes">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado no mês</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,193,7,.25);">
+                <h3>Operações Abertas</h3>
+                <div class="value" style="color:#ffc107;" id="home-ops-abertas">0</div>
+                <div class="subtitle">Processing + Payment Pending</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,152,0,.3);">
+                <h3>Asset Pending</h3>
+                <div class="value" style="color:#ff9800;" id="home-asset-pending">0,00 USDT</div>
+                <div class="subtitle">USDT que você deve aos clientes</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,85,85,.25);">
+                <h3>A Pagar Fornecedor</h3>
+                <div class="value" style="color:#ff5555;" id="home-a-pagar">R$ 0,00</div>
+                <div class="subtitle">BRL pendente ao fornecedor</div>
+            </div>
+        </div>
+
+        <!-- Linha: últimas operações + resumo rápido -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap;" class="home-grid">
+
+            <!-- Últimas operações -->
+            <div class="table-card">
+                <div class="section-header" style="margin-bottom:16px;">
+                    <h2 style="font-size:1rem;">Últimas Operações</h2>
+                    <a href="#" data-page="operacoes" class="home-link" style="font-size:.8rem;color:#555;">Ver todas →</a>
+                </div>
+                <table style="width:100%;">
+                    <thead><tr>
+                        <th style="font-size:.75rem;padding:6px 10px;">Data</th>
+                        <th style="font-size:.75rem;padding:6px 10px;">Cliente</th>
+                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">USDT</th>
+                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Lucro</th>
+                        <th style="font-size:.75rem;padding:6px 10px;">Status</th>
+                    </tr></thead>
+                    <tbody id="home-tabela-ops"></tbody>
+                </table>
+            </div>
+
+            <!-- Últimas compras fornecedor -->
+            <div class="table-card">
+                <div class="section-header" style="margin-bottom:16px;">
+                    <h2 style="font-size:1rem;">Últimas Compras</h2>
+                    <a href="#" data-page="fornecedor" class="home-link" style="font-size:.8rem;color:#555;">Ver todas →</a>
+                </div>
+                <table style="width:100%;">
+                    <thead><tr>
+                        <th style="font-size:.75rem;padding:6px 10px;">Data</th>
+                        <th style="font-size:.75rem;padding:6px 10px;">Fornecedor</th>
+                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">USDT</th>
+                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Cotação</th>
+                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Saldo</th>
+                    </tr></thead>
+                    <tbody id="home-tabela-compras"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="page-section" id="page-fornecedor">
 
         <div class="section-header">
             <div>
@@ -92,25 +180,25 @@
             </div>
         </div>
 
-        <div class="cards-grid">
-            <div class="card">
+        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,280px));">
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
                 <h3>Volume Comprado (Hoje)</h3>
-                <div class="value"><span id="card-vol-usdt">0,00</span> USDT</div>
+                <div class="value" style="color:#2196F3;"><span id="card-vol-usdt">0,00</span> USDT</div>
                 <div class="subtitle">Investido: <span id="card-vol-brl">R$ 0,00</span></div>
             </div>
-            <div class="card">
+            <div class="card" style="border-color:rgba(255,193,7,.25);">
                 <h3>Fluxo Fornecedor (USDT)</h3>
-                <div class="value">Comprado: <span id="card-forn-comprado">0,00</span></div>
+                <div class="value" style="color:#ffc107;"><span id="card-forn-comprado">0,00</span> USDT</div>
                 <div class="subtitle" style="color:#ff5555;">Pendente a receber: <span id="card-forn-pendente">0,00</span></div>
             </div>
-            <div class="card">
+            <div class="card" style="border-color:rgba(255,85,85,.25);">
                 <h3>Contas a Pagar (BRL)</h3>
-                <div class="value">Enviado: <span id="card-pagar-enviado">R$ 0,00</span></div>
+                <div class="value" style="color:#e0e0e0;"><span id="card-pagar-enviado">R$ 0,00</span></div>
                 <div class="subtitle" style="color:#ff5555;">Pendente a enviar: <span id="card-pagar-pendente">R$ 0,00</span></div>
             </div>
-            <div class="card highlight">
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
                 <h3>Saldo Disponível</h3>
-                <div class="value" id="card-saldo-disponivel">0,00 USDT</div>
+                <div class="value" style="color:#4CAF50;" id="card-saldo-disponivel">0,00 USDT</div>
                 <div class="subtitle">USDT em estoque (não vendido)</div>
             </div>
         </div>
@@ -382,7 +470,7 @@
             <div class="ch-meta">
                 <span>Mínima 24h: <strong id="cot-min">—</strong></span>
                 <span>Máxima 24h: <strong id="cot-max">—</strong></span>
-                <span>Atualização: <strong>15s</strong></span>
+                <span>Atualização: <strong>5s</strong></span>
                 <span>Fonte: <strong id="cot-fonte">—</strong></span>
             </div>
         </div>
@@ -478,10 +566,61 @@
         <div class="section-header">
             <div>
                 <h1>Operações</h1>
-                <p>Clique em qualquer célula para editar</p>
+                <p><span id="op-typing-text"></span><span id="op-typing-cursor"></span></p>
             </div>
             <div class="header-actions" style="display:flex;gap:10px;">
                 <button class="btn-secondary" id="btn-exportar-op" style="font-size:.82rem;padding:8px 16px;">Exportar PDF</button>
+            </div>
+        </div>
+
+        <!-- Glossário de Status — elegante e discreto -->
+        <div class="status-glossary" id="status-glossary">
+            <button class="sg-toggle" onclick="toggleGlossary()" title="Ver legenda de status">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Status Legend
+            </button>
+            <div class="sg-panel" id="sg-panel" style="display:none;">
+                <div class="sg-title">Transaction Status</div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#4CAF50;"></span>
+                    <div>
+                        <span class="sg-term">Settled</span>
+                        <span class="sg-pt">Concluída</span>
+                        <span class="sg-desc">Operação totalmente liquidada — dinheiro e ativo entregues.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#2196F3;"></span>
+                    <div>
+                        <span class="sg-term">Processing</span>
+                        <span class="sg-pt">Em Andamento</span>
+                        <span class="sg-desc">Operação em fila de execução ou aguardando rede.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ffc107;"></span>
+                    <div>
+                        <span class="sg-term">Payment Pending</span>
+                        <span class="sg-pt">Falta Pagar</span>
+                        <span class="sg-desc">Fluxo financeiro do cliente ainda não identificado.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ff9800;"></span>
+                    <div>
+                        <span class="sg-term">Asset Pending</span>
+                        <span class="sg-pt">Nós Devemos</span>
+                        <span class="sg-desc">Pagamento recebido — USDT ainda não liberado.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ff5555;"></span>
+                    <div>
+                        <span class="sg-term">Voided</span>
+                        <span class="sg-pt">Cancelada</span>
+                        <span class="sg-desc">Transação anulada ou invalidada.</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -515,16 +654,16 @@
                 <table id="tabela-op-excel">
                     <thead>
                         <tr>
-                            <th style="width:100px;">Data</th>
-                            <th style="width:140px;">Status</th>
-                            <th style="width:150px;">Cliente</th>
-                            <th style="width:130px;">Valor USDT</th>
-                            <th style="width:130px;">Cot. Compra</th>
-                            <th style="width:130px;">Cot. Venda</th>
-                            <th style="width:130px;">Total Compra</th>
-                            <th style="width:130px;">Total Venda</th>
-                            <th style="width:120px;">Lucro</th>
-                            <th style="width:60px;"></th>
+                            <th style="width:110px;text-align:left;">Data</th>
+                            <th style="width:150px;text-align:left;">Status</th>
+                            <th style="width:150px;text-align:left;">Cliente</th>
+                            <th style="width:130px;text-align:right;padding-right:14px;">Valor USDT</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Compra</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Venda</th>
+                            <th style="width:140px;text-align:right;padding-right:14px;">Total Compra</th>
+                            <th style="width:130px;text-align:right;padding-right:14px;">Total Venda</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Lucro</th>
+                            <th style="width:70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="tabela-operacoes">
