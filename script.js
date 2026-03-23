@@ -181,61 +181,9 @@ function initOperacoes() {
     renderTabelaOp();
     atualizarCardsOp();
     dragScroll(document.getElementById('drag-operacoes'));
-    iniciarTyping();
 }
 
-// ── Efeito de digitação no subtítulo ─────────────────────────
-function iniciarTyping() {
-    const el = document.getElementById('op-typing-text');
-    if (!el) return;
-
-    const frases = [
-        'Controle total das suas operações.',
-        'Gestão financeira simplificada.',
-        'Visão clara do seu lucro.',
-        'Spread calculado automaticamente.',
-        'A plataforma dos grandes operadores.',
-        'Saldos sempre atualizados.',
-        'Decisões mais inteligentes.',
-        'Conciliação ágil e precisa.',
-        'Sua operação em alto nível.',
-        'O futuro do OTC é aqui.',
-        'Eficiência operacional garantida.',
-        'Inteligência de mercado ao seu alcance.',
-        'A Suite FX que você precisa.',
-        'Segurança em cada transação.',
-        'Excelência em cada detalhe.',
-    ];
-
-    let fi = 0, ci = 0, apagando = false;
-    const VELOCIDADE_DIG  = 45;   // ms por letra digitando
-    const VELOCIDADE_APAG = 22;   // ms por letra apagando
-    const PAUSA_LEITURA   = 2200; // ms antes de apagar
-    const PAUSA_PROXIMA   = 400;  // ms antes de digitar próxima
-
-    function tick() {
-        const frase = frases[fi];
-        if (!apagando) {
-            if (ci <= frase.length) {
-                el.textContent = frase.slice(0, ci++);
-                setTimeout(tick, VELOCIDADE_DIG);
-            } else {
-                apagando = true;
-                setTimeout(tick, PAUSA_LEITURA);
-            }
-        } else {
-            if (ci > 0) {
-                el.textContent = frase.slice(0, --ci);
-                setTimeout(tick, VELOCIDADE_APAG);
-            } else {
-                apagando = false;
-                fi = (fi + 1) % frases.length;
-                setTimeout(tick, PAUSA_PROXIMA);
-            }
-        }
-    }
-    tick();
-}
+// Typing effect removido
 
 // ── Toggle glossário de status ───────────────────────────────
 function toggleGlossary() {
@@ -574,78 +522,184 @@ window._initOperacoes   = initOperacoes;
 // ============================================================
 // MÓDULO HOME
 // ============================================================
+let homeChartLucro  = null;
+let homeChartVolume = null;
+let homeClockTick   = null;
+
 function renderHome() {
-    // Greeting
-    const hora = new Date().getHours();
+    // ── Saudação + data + relógio ─────────────────────────────
+    const hora  = new Date().getHours();
     const greet = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     const usuario = sessionStorage.getItem('kroma_usuario') || 'gestor';
-    const nome = usuario.charAt(0).toUpperCase() + usuario.slice(1);
+    const nome    = usuario.charAt(0).toUpperCase() + usuario.slice(1);
     const elG = document.getElementById('home-greeting');
     if (elG) elG.textContent = `${greet}, ${nome}`;
 
     const elD = document.getElementById('home-date');
-    if (elD) elD.textContent = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    if (elD) elD.textContent = new Date().toLocaleDateString('pt-BR',
+        { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
-    // KPIs
-    const mesAtual   = new Date().toLocaleDateString('pt-BR').slice(3); // MM/YYYY
-    const opsMes     = opOperacoes.filter(o => o.data && o.data.slice(3) === mesAtual);
-    const lucroMes   = opsMes.reduce((s,o) => s + (o.lucro||0), 0);
-    const volumeMes  = opsMes.reduce((s,o) => s + (o.usdt||0), 0);
-    const saldoDisp  = saldoTotalDisponivel();
-    const opsAbertas = opOperacoes.filter(o => o.status === 'andamento' || o.status === 'falta_pagar').length;
-    const assetPend  = opOperacoes.filter(o => o.status === 'nos_devemos').reduce((s,o) => s+(o.usdt||0), 0);
-    const aPagarForn = Math.max(0, opFornecedor.reduce((s,o) => s+(o.totalBrl||0), 0) - opFornecedor.reduce((s,o) => s+(o.pix||0), 0));
+    // Relógio em tempo real
+    if (!homeClockTick) {
+        homeClockTick = setInterval(() => {
+            const elT = document.getElementById('home-time');
+            if (elT) elT.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }, 1000);
+    }
+    const elT = document.getElementById('home-time');
+    if (elT) elT.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('home-saldo',        fmtDisplay(saldoDisp) + ' USDT');
-    set('home-volume-mes',   fmtDisplay(volumeMes) + ' USDT');
-    set('home-lucro-mes',    'R$ ' + fmtDisplay(lucroMes));
-    set('home-ops-abertas',  opsAbertas);
-    set('home-asset-pending', fmtDisplay(assetPend) + ' USDT');
-    set('home-a-pagar',      'R$ ' + fmtDisplay(aPagarForn));
+    // ── KPIs ─────────────────────────────────────────────────
+    const mesAtual  = new Date().toLocaleDateString('pt-BR').slice(3);
+    const opsMes    = opOperacoes.filter(o => o.data && o.data.slice(3) === mesAtual);
+    const lucroMes  = opsMes.reduce((s,o) => s+(o.lucro||0), 0);
+    const volumeMes = opsMes.reduce((s,o) => s+(o.usdt||0), 0);
+    const saldoDisp = saldoTotalDisponivel();
+    const opsAbert  = opOperacoes.filter(o => o.status==='andamento' || o.status==='falta_pagar').length;
+    const assetPend = opOperacoes.filter(o => o.status==='nos_devemos').reduce((s,o)=>s+(o.usdt||0),0);
+    const aPagarF   = Math.max(0, opFornecedor.reduce((s,o)=>s+(o.totalBrl||0),0) - opFornecedor.reduce((s,o)=>s+(o.pix||0),0));
 
-    // Tabela últimas operações (5 mais recentes com cliente)
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('home-saldo',         fmtDisplay(saldoDisp)+' USDT');
+    set('home-lucro-mes',     'R$ '+fmtDisplay(lucroMes));
+    set('home-volume-mes',    fmtDisplay(volumeMes)+' USDT');
+    set('home-ops-abertas',   opsAbert);
+    set('home-asset-pending', fmtDisplay(assetPend)+' USDT');
+    set('home-a-pagar',       'R$ '+fmtDisplay(aPagarF));
+
+    // Lucro do mês: cor dinâmica
+    const elLM = document.getElementById('home-lucro-mes');
+    if (elLM) elLM.style.color = lucroMes >= 0 ? '#4CAF50' : '#ff5555';
+
+    // ── Gráfico: Lucro 30 dias ────────────────────────────────
+    const hoje30   = new Date();
+    const ini30    = new Date(); ini30.setDate(ini30.getDate() - 29);
+    const diasMap  = {};
+    const volMap   = {};
+
+    // Gera todos os 30 dias
+    for (let i = 0; i < 30; i++) {
+        const d = new Date(ini30); d.setDate(ini30.getDate() + i);
+        const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+        diasMap[label] = 0;
+        volMap[label]  = 0;
+    }
+
+    opOperacoes.forEach(op => {
+        if (!op.data || !op.lucro) return;
+        const [dd,mm,aa] = op.data.split('/');
+        const dt = new Date(+aa,+mm-1,+dd);
+        if (dt >= ini30 && dt <= hoje30) {
+            const label = dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+            diasMap[label] = (diasMap[label]||0) + (op.lucro||0);
+            volMap[label]  = (volMap[label]||0)  + (op.usdt||0);
+        }
+    });
+
+    const labels  = Object.keys(diasMap);
+    const lucros  = Object.values(diasMap).map(v => +v.toFixed(2));
+    const volumes = Object.values(volMap).map(v => +v.toFixed(2));
+
+    // Chart Lucro
+    if (homeChartLucro) homeChartLucro.destroy();
+    const ctxL = document.getElementById('home-chart-lucro')?.getContext('2d');
+    if (ctxL) {
+        homeChartLucro = new Chart(ctxL, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    data: lucros,
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76,175,80,.08)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.4,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false, animation:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',maxTicksLimit:8,font:{size:10}} },
+                    y:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',font:{size:10},callback:v=>'R$'+fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // Chart Volume
+    if (homeChartVolume) homeChartVolume.destroy();
+    const ctxV = document.getElementById('home-chart-volume')?.getContext('2d');
+    if (ctxV) {
+        homeChartVolume = new Chart(ctxV, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    data: volumes,
+                    backgroundColor: 'rgba(33,150,243,.25)',
+                    borderColor: 'rgba(33,150,243,.7)',
+                    borderWidth: 1,
+                    borderRadius: 3,
+                }]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false, animation:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',maxTicksLimit:8,font:{size:10}} },
+                    y:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',font:{size:10},callback:v=>fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // ── Tabela últimas operações ──────────────────────────────
+    const statusCores = { concluida:'#4CAF50',andamento:'#2196F3',falta_pagar:'#ffc107',nos_devemos:'#ff9800',cancelada:'#ff5555' };
+    const statusNomes = { concluida:'Settled',andamento:'Processing',falta_pagar:'Payment Pending',nos_devemos:'Asset Pending',cancelada:'Voided' };
+
     const tbOps = document.getElementById('home-tabela-ops');
     if (tbOps) {
-        const ultOps = opOperacoes.filter(o => o.cliente).slice(0, 5);
-        const statusCores = { concluida:'#4CAF50', andamento:'#2196F3', falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555' };
-        const statusNomes = { concluida:'Settled', andamento:'Processing', falta_pagar:'Payment Pending', nos_devemos:'Asset Pending', cancelada:'Voided' };
-        tbOps.innerHTML = ultOps.length ? ultOps.map(o => `
+        const ultOps = opOperacoes.filter(o=>o.cliente).slice(0,6);
+        tbOps.innerHTML = ultOps.length ? ultOps.map(o=>`
             <tr>
-                <td style="padding:7px 10px;font-size:.82rem;">${o.data}</td>
-                <td style="padding:7px 10px;font-size:.82rem;font-weight:600;">${o.cliente}</td>
-                <td style="padding:7px 10px;font-size:.82rem;text-align:right;">${fmtDisplay(o.usdt)}</td>
-                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:${(o.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
-                    ${o.lucro ? 'R$ '+fmtDisplay(o.lucro) : '—'}
+                <td style="padding:6px 8px;font-size:.78rem;">${o.data}</td>
+                <td style="padding:6px 8px;font-size:.78rem;font-weight:600;">${o.cliente}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:${(o.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
+                    ${o.lucro?'R$ '+fmtDisplay(o.lucro):'—'}
                 </td>
-                <td style="padding:7px 10px;">
-                    <span style="font-size:.7rem;font-weight:700;color:${statusCores[o.status]||'#888'};">
+                <td style="padding:6px 8px;">
+                    <span style="font-size:.68rem;font-weight:700;color:${statusCores[o.status]||'#888'};">
                         ${statusNomes[o.status]||o.status}
                     </span>
                 </td>
             </tr>`).join('')
-        : '<tr><td colspan="5" class="empty-state">Nenhuma operação ainda.</td></tr>';
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:#555;font-size:.82rem;">Nenhuma operação ainda.</td></tr>';
     }
 
-    // Tabela últimas compras fornecedor (5 mais recentes)
+    // ── Tabela últimas compras ────────────────────────────────
     const tbComp = document.getElementById('home-tabela-compras');
     if (tbComp) {
-        const ultComp = opFornecedor.slice(0, 5);
+        const ultComp = opFornecedor.slice(0,6);
         tbComp.innerHTML = ultComp.length ? ultComp.map(o => {
-            const saldo = saldoPorCompra(o.ref);
-            const corSaldo = saldo <= 0 ? '#4CAF50' : saldo < o.usdt ? '#ffc107' : '#a0a0a0';
+            const saldo   = saldoPorCompra(o.ref);
+            const corSaldo= saldo<=0?'#4CAF50':saldo<o.usdt?'#ffc107':'#a0a0a0';
             return `
             <tr>
-                <td style="padding:7px 10px;font-size:.82rem;">${o.data}</td>
-                <td style="padding:7px 10px;font-size:.82rem;">${o.fornecedor||'—'}</td>
-                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:#4CAF50;font-weight:700;">${fmtDisplay(o.usdt)}</td>
-                <td style="padding:7px 10px;font-size:.82rem;text-align:right;">R$ ${fmtCot(o.cotacao)}</td>
-                <td style="padding:7px 10px;font-size:.82rem;text-align:right;color:${corSaldo};font-weight:700;">${fmtDisplay(saldo)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;">${o.data}</td>
+                <td style="padding:6px 8px;font-size:.78rem;">${o.fornecedor||'—'}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:#4CAF50;font-weight:700;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;">R$ ${fmtCot(o.cotacao)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:${corSaldo};font-weight:700;">${fmtDisplay(saldo)}</td>
             </tr>`;
         }).join('')
-        : '<tr><td colspan="5" class="empty-state">Nenhuma compra ainda.</td></tr>';
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:#555;font-size:.82rem;">Nenhuma compra ainda.</td></tr>';
     }
 }
+
 
 // ============================================================
 // MÓDULO A — FORNECEDOR
@@ -1018,75 +1072,169 @@ function filtrarPorPeriodo(dados, campo='data') {
     });
 }
 
+// ── Despesas ──────────────────────────────────────────────────
+let opDespesas = JSON.parse(localStorage.getItem('banco_despesas')) || [];
+function salvarDespesas() { localStorage.setItem('banco_despesas', JSON.stringify(opDespesas)); }
+
+(function initDespesas() {
+    const btnAdd = document.getElementById('btn-add-despesa');
+    const iDesc  = document.getElementById('desp-desc');
+    const iVal   = document.getElementById('desp-valor');
+    const iData  = document.getElementById('desp-data');
+    const iCat   = document.getElementById('desp-categoria');
+    if (!btnAdd) return;
+
+    // Data padrão = hoje
+    iData.value = new Date().toISOString().split('T')[0];
+
+    iVal.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); });
+
+    btnAdd.addEventListener('click', () => {
+        const desc  = iDesc.value.trim();
+        const valor = parseNum(iVal.value);
+        const data  = iData.value;
+        const cat   = iCat.value;
+        if (!desc)  { toast('Informe a descrição.','error'); return; }
+        if (!valor) { toast('Informe o valor.','error'); return; }
+        if (!data)  { toast('Informe a data.','error'); return; }
+
+        const [a,m,d] = data.split('-');
+        opDespesas.unshift({
+            ref:   Date.now(),
+            data:  `${d}/${m}/${a}`,
+            desc, valor, cat,
+        });
+        salvarDespesas();
+        iDesc.value = ''; iVal.value = '';
+        iData.value = new Date().toISOString().split('T')[0];
+        renderLucro();
+        toast('Despesa registrada!');
+    });
+})();
+
+function renderDespesas() {
+    const tb = document.getElementById('tabela-despesas');
+    if (!tb) return;
+    const despPeriodo = filtrarPorPeriodo(opDespesas);
+    tb.innerHTML = '';
+    if (!despPeriodo.length) {
+        tb.innerHTML = '<tr><td colspan="5" class="empty-state">Nenhuma despesa no período.</td></tr>';
+        return;
+    }
+    const catLabel = { operacional:'Operacional', pessoal:'Pessoal', tecnologia:'Tecnologia', outros:'Outros' };
+    despPeriodo.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${d.data}</td>
+            <td style="font-weight:600;">${d.desc}</td>
+            <td><span class="badge-status pendente">${catLabel[d.cat]||d.cat}</span></td>
+            <td style="text-align:right;color:#ff5555;font-weight:700;">R$ ${fmtDisplay(d.valor)}</td>
+            <td>
+                <button class="btn-small del" onclick="excluirDespesa(${d.ref})">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+            </td>`;
+        tb.appendChild(tr);
+    });
+}
+
+function excluirDespesa(ref) {
+    if (!confirm('Excluir esta despesa?')) return;
+    opDespesas = opDespesas.filter(d => d.ref !== ref);
+    salvarDespesas();
+    renderLucro();
+    toast('Despesa excluída.');
+}
+
 function renderLucro() {
-    // Precisa ter operação de cliente COM cotação de compra registrada
-    const dados = filtrarPorPeriodo(opClientes);
+    // Fonte: opOperacoes (tabela Excel) — operações com cotação de compra E venda
+    const dados = filtrarPorPeriodo(opOperacoes);
+    const despPeriodo = filtrarPorPeriodo(opDespesas);
 
     let totLucro=0, totVolume=0, qtdOps=0;
     const lucroPorDia = {};
     const detalhe = [];
 
     dados.forEach(op => {
-        if (!op.cotacaoVenda || !op.cotacaoCompra) return;
-        const spread    = op.cotacaoVenda - op.cotacaoCompra;
-        const lucroOp   = spread * op.usdt;
+        if (!op.cotVenda || !op.cotCompra || !op.usdt) return;
+        const spread  = op.cotVenda - op.cotCompra;
+        const lucroOp = spread * op.usdt;
         totLucro  += lucroOp;
         totVolume += op.usdt;
         qtdOps++;
-
         lucroPorDia[op.data] = (lucroPorDia[op.data]||0) + lucroOp;
-        detalhe.push({...op, spread, lucroOp});
+        detalhe.push({ data:op.data, cliente:op.cliente||'—', usdt:op.usdt,
+            cotacaoCompra:op.cotCompra, cotacaoVenda:op.cotVenda, spread, lucroOp });
     });
 
-    const spreadMedio = totVolume > 0 ? totLucro/totVolume : 0;
+    const totDespesas  = despPeriodo.reduce((s,d) => s+(d.valor||0), 0);
+    const lucroLiquido = totLucro - totDespesas;
+    const spreadMedio  = totVolume > 0 ? totLucro/totVolume : 0;
 
-    document.getElementById('lc-lucro-total').textContent  = 'R$ '+fmtDisplay(totLucro);
-    document.getElementById('lc-volume').textContent       = fmtDisplay(totVolume)+' USDT';
-    document.getElementById('lc-spread-medio').textContent = 'R$ '+fmtCot(spreadMedio);
-    document.getElementById('lc-qtd-ops').textContent      = qtdOps;
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('lc-lucro-total',   'R$ '+fmtDisplay(totLucro));
+    set('lc-despesas',      'R$ '+fmtDisplay(totDespesas));
+    set('lc-lucro-liquido', 'R$ '+fmtDisplay(lucroLiquido));
+    set('lc-volume',        fmtDisplay(totVolume)+' USDT');
+    set('lc-spread-medio',  'R$ '+fmtCot(spreadMedio));
+    set('lc-qtd-ops',       qtdOps);
 
-    // Gráfico de barras
-    const dias   = Object.keys(lucroPorDia).sort((a,b)=>{
+    // Lucro líquido: cor verde/vermelho
+    const elLL = document.getElementById('lc-lucro-liquido');
+    if (elLL) elLL.style.color = lucroLiquido >= 0 ? '#2196F3' : '#ff5555';
+
+    // Gráfico — lucro bruto vs despesas por dia
+    const diasSet = new Set([
+        ...Object.keys(lucroPorDia),
+        ...despPeriodo.map(d => d.data)
+    ]);
+    const dias = [...diasSet].sort((a,b) => {
         const [da,ma,aa]=a.split('/'); const [db,mb,ab]=b.split('/');
         return new Date(+aa,+ma-1,+da)-new Date(+ab,+mb-1,+db);
     });
-    const valores = dias.map(d=>+lucroPorDia[d].toFixed(2));
-
-    if (graficoLucro) graficoLucro.destroy();
-    const ctx = document.getElementById('grafico-lucro').getContext('2d');
-    graficoLucro = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: dias,
-            datasets: [{
-                label: 'Lucro (R$)',
-                data: valores,
-                backgroundColor: 'rgba(76,175,80,0.25)',
-                borderColor: 'rgba(76,175,80,0.9)',
-                borderWidth: 2,
-                borderRadius: 6,
-            }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend:{display:false} },
-            scales: {
-                x: { grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#888'} },
-                y: { grid:{color:'rgba(255,255,255,.05)'}, ticks:{color:'#888', callback: v=>'R$ '+fmtDisplay(v)} }
-            }
-        }
+    const valoresLucro = dias.map(d => +(lucroPorDia[d]||0).toFixed(2));
+    const valoresDesp  = dias.map(d => {
+        const desp = despPeriodo.filter(x => x.data===d).reduce((s,x)=>s+x.valor,0);
+        return +(-desp).toFixed(2);
     });
 
-    // Tabela detalhamento
+    if (graficoLucro) graficoLucro.destroy();
+    const ctx = document.getElementById('grafico-lucro')?.getContext('2d');
+    if (ctx) {
+        graficoLucro = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dias,
+                datasets: [
+                    { label:'Lucro', data:valoresLucro, backgroundColor:'rgba(76,175,80,0.3)', borderColor:'rgba(76,175,80,0.9)', borderWidth:2, borderRadius:4 },
+                    { label:'Despesas', data:valoresDesp, backgroundColor:'rgba(255,85,85,0.2)', borderColor:'rgba(255,85,85,0.7)', borderWidth:2, borderRadius:4 },
+                ]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false,
+                plugins: { legend:{ labels:{ color:'#888', boxWidth:12 } } },
+                scales: {
+                    x: { grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#888'} },
+                    y: { grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#888', callback:v=>'R$ '+fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // Tabela despesas
+    renderDespesas();
+
+    // Tabela operações
     const tb = document.getElementById('tabela-lucro');
+    if (!tb) return;
     tb.innerHTML = '';
     if (!detalhe.length) {
-        tb.innerHTML = '<tr><td colspan="7" class="empty-state">Sem dados no período. Registre vendas com cotação de compra para ver o lucro.</td></tr>';
+        tb.innerHTML = '<tr><td colspan="7" class="empty-state">Sem operações com spread registrado no período.</td></tr>';
         return;
     }
     detalhe.forEach(op => {
         const cor = op.lucroOp >= 0 ? '#4CAF50' : '#ff5555';
-        const tr = document.createElement('tr');
+        const tr  = document.createElement('tr');
         tr.innerHTML = `
             <td>${op.data}</td>
             <td style="font-weight:600;">${op.cliente}</td>
@@ -1100,23 +1248,22 @@ function renderLucro() {
 }
 
 // ============================================================
-// MÓDULO D — COTAÇÕES AO VIVO (OTIMIZADO COM PAR SINTÉTICO)
+// MÓDULO D — COTAÇÕES AO VIVO
 // ============================================================
 let cotacaoAtual      = 0;
+let graficoCotacao    = null;
 let cotacoesIniciadas = false;
+let velasData         = []; // dados do gráfico de velas
 
 function iniciarCotacoes() {
     if (cotacoesIniciadas) return;
     cotacoesIniciadas = true;
-    
     iniciarWidgetTV();
-    buscarCotacaoSintetica();
-    
-    // Atualiza a cada 5 segundos para refletir o mercado cripto
-    setInterval(buscarCotacaoSintetica, 5000);
+    buscarVelas();
+    setInterval(buscarVelas, 300000);
 }
 
-// ── 1. Widget TradingView (O Gráfico Profissional) ───────────
+// ── Widget TradingView — gráfico de velas ─────────────────────
 function iniciarWidgetTV() {
     const chartContainer = document.getElementById('tv-chart-container');
     if (!chartContainer || chartContainer.dataset.loaded) return;
@@ -1127,71 +1274,72 @@ function iniciarWidgetTV() {
     script.onload = () => {
         if (typeof TradingView === 'undefined') return;
         new TradingView.widget({
-            "autosize": true,
-            // AQUI ESTÁ O SEU PAR SINTÉTICO INSTITUCIONAL:
-            "symbol": "FX_IDC:USDBRL*BITSTAMP:USDTUSD", 
-            "interval": "60", 
-            "timezone": "America/Sao_Paulo",
-            "theme": "dark",
-            "style": "1", 
-            "locale": "br",
-            "enable_publishing": false,
-            "backgroundColor": "rgba(13, 13, 13, 1)", 
-            "gridColor": "rgba(255, 255, 255, 0.05)",
-            "hide_top_toolbar": false,
-            "hide_legend": false,
-            "save_image": false,
-            "container_id": "tv-chart-container"
+            autosize:         true,
+            symbol:           'FX_IDC:USDBRL',
+            interval:         'D',
+            timezone:         'America/Sao_Paulo',
+            theme:            'dark',
+            style:            '1',
+            locale:           'br',
+            toolbar_bg:       '#111',
+            backgroundColor:  'rgba(13,13,13,1)',
+            hide_top_toolbar: false,
+            hide_legend:      false,
+            save_image:       false,
+            container_id:     'tv-chart-container',
         });
     };
     document.body.appendChild(script);
+
+    // Preço numérico via AwesomeAPI
+    buscarCotacaoSimples();
+    setInterval(buscarCotacaoSimples, 10000);
 }
 
-// ── 2. Motor de Cotação Numérica (O Preço do Topo da Tela) ───
-// Para o número ficar igual ao gráfico, precisamos recriar a mesma matemática
-async function buscarCotacaoSintetica() {
+async function buscarCotacaoSimples() {
+    // Binance funciona sem CORS — mesma fonte da cotacao-cliente.html
     try {
-        // Passo A: Pegamos o Dólar Comercial exato via AwesomeAPI
-        const rDolar = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { cache: 'no-store' });
-        const dDolar = await rDolar.json();
-        const dolarBRL = parseFloat(dDolar.USDBRL.bid);
-        const dolarVar = parseFloat(dDolar.USDBRL.pctChange); // Pegamos a variação do Dólar para mostrar a seta
+        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+        if (!r.ok) throw new Error('Binance ' + r.status);
+        const d = await r.json();
+        let preco = parseFloat(d.lastPrice);
+        // Binance às vezes retorna invertido (< 1)
+        if (preco < 1 && preco > 0) preco = 1 / preco;
+        if (preco < 3) throw new Error('Valor suspeito: ' + preco);
 
-        // Passo B: Pegamos o valor do USDT em Dólares via Bitstamp (como no seu TradingView)
-        const rTether = await fetch('https://www.bitstamp.net/api/v2/ticker/usdtusd/');
-        const dTether = await rTether.json();
-        const usdtUSD = parseFloat(dTether.last);
+        const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
+        const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
+        const pct = parseFloat(d.priceChangePercent) || 0;
 
-        // Passo C: A Mágica do Par Sintético (Multiplicação)
-        if (dolarBRL > 0 && usdtUSD > 0) {
-            let precoSintetico = dolarBRL * usdtUSD;
-            
-            // Calculamos mínimos e máximos projetados
-            let minSintetico = parseFloat(dDolar.USDBRL.low) * parseFloat(dTether.low);
-            let maxSintetico = parseFloat(dDolar.USDBRL.high) * parseFloat(dTether.high);
+        cotacaoAtual = preco;
+        atualizarHeroCotacao(preco, lo, hi, pct, 'Binance · USDT/BRL');
+        return;
+    } catch(_) {}
 
-            atualizarDadosCotacao(precoSintetico, minSintetico, maxSintetico, dolarVar, 'AXONE Sintético (USDBRL x USDTUSD)');
-            return;
+    // Fallback: AwesomeAPI
+    try {
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
+        const d = await r.json();
+        const bid = parseFloat(d.USDTBRL.bid);
+        if (bid > 1) {
+            cotacaoAtual = bid;
+            atualizarHeroCotacao(bid,
+                parseFloat(d.USDTBRL.low),
+                parseFloat(d.USDTBRL.high),
+                parseFloat(d.USDTBRL.pctChange) || 0,
+                'AwesomeAPI · USDT/BRL');
         }
-    } catch(e) { 
-        console.warn('Falha na matemática sintética.', e); 
-    }
-
-    if (cotacaoAtual === 0) {
-        document.getElementById('cot-preco-principal').textContent = 'Conectando...';
-        document.getElementById('ultimo-update').textContent = 'Buscando liquidez...';
-        document.getElementById('ultimo-update').style.color = '#ffc107'; // Amarelo de alerta
-    }
+    } catch(_) {}
 }
 
-// ── 3. Atualização de Tela ───────────────────────────────────
-function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
-    cotacaoAtual = preco;
+function buscarCotacao() { buscarCotacaoSimples(); }
+
+function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
     document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(preco);
 
     const elVar = document.getElementById('cot-variacao');
     if (pctChg !== 0) {
-        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% (Variação USD)';
+        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% nas últimas 24h';
         elVar.className   = 'ch-change ' + (pctChg >= 0 ? 'up' : 'down');
     } else {
         elVar.textContent = '';
@@ -1206,7 +1354,6 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
     const elTPrice  = document.getElementById('ticker-price');
     const elTChange = document.getElementById('ticker-change');
     const elTMobile = document.getElementById('ticker-price-mobile');
-    
     if (elTPrice)  elTPrice.textContent  = 'R$ ' + fmtCot(preco);
     if (elTMobile) elTMobile.textContent = 'R$ ' + fmtCot(preco);
     if (elTChange && pctChg !== 0) {
@@ -1214,14 +1361,148 @@ function atualizarDadosCotacao(preco, low, high, pctChg, fonte) {
         elTChange.className   = 'change ' + (pctChg >= 0 ? 'up' : 'down');
     }
 
-    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
-    document.getElementById('ultimo-update').style.color = '#a0a0a0'; 
 
-    calcularSpread(); 
+    calcularSpread();
 }
 
-// ── 4. Calculadora de Spread ─────────────────────────────────
+// ── Velas USDT/BRL — BCB histórico diário × fator USDT/USD ────
+async function buscarVelas() {
+    try {
+        const fim = new Date();
+        const ini = new Date(); ini.setDate(ini.getDate() - 50);
+
+        const fmtBcb = d => {
+            const dd   = String(d.getDate()).padStart(2,'0');
+            const mm   = String(d.getMonth()+1).padStart(2,'0');
+            return `${mm}-${dd}-${d.getFullYear()}`;
+        };
+
+        const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@di,dataFinalCotacao=@df)?@di='${fmtBcb(ini)}'&@df='${fmtBcb(fim)}'&$top=200&$orderby=dataHoraCotacao%20asc&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`;
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('BCB error');
+        const d = await r.json();
+        const itens = d.value;
+        if (!itens || !itens.length) throw new Error('Sem dados BCB');
+
+        // Agrupa por dia (formato dataHoraCotacao: "YYYY-MM-DD HH:MM:SS.mmm")
+        const porDia = {};
+        itens.forEach(item => {
+            // Extrai só a data "YYYY-MM-DD"
+            const dia = item.dataHoraCotacao.substring(0, 10);
+            if (!porDia[dia]) porDia[dia] = [];
+            const med = (parseFloat(item.cotacaoCompra) + parseFloat(item.cotacaoVenda)) / 2;
+            porDia[dia].push(med);
+        });
+
+        const dias = Object.keys(porDia).sort().slice(-30);
+
+        velasData = dias.map((dia, i) => {
+            const vals  = porDia[dia];
+            const close = vals[vals.length - 1];
+            const open  = i > 0 ? porDia[dias[i-1]][porDia[dias[i-1]].length - 1] : vals[0];
+            const high  = Math.max(...vals);
+            const low   = Math.min(...vals);
+            // Formata label DD/MM
+            const partes = dia.split('-');
+            return { t: `${partes[2]}/${partes[1]}`, open, high, low, close };
+        });
+
+        renderVelas();
+    } catch(e) {
+        console.warn('Erro velas BCB:', e);
+    }
+}
+
+// ── Gráfico de Velas Japonesas (Candlestick) ──────────────────
+function renderVelas() {
+    const ctx = document.getElementById('grafico-cotacao');
+    if (!ctx) return;
+    if (graficoCotacao) { graficoCotacao.destroy(); graficoCotacao = null; }
+    if (!velasData.length) return;
+
+    const labels     = velasData.map(v => v.t);
+    const corVela    = velasData.map(v => v.close >= v.open ? 'rgba(76,175,80,0.85)'  : 'rgba(255,85,85,0.85)');
+    const corBorda   = velasData.map(v => v.close >= v.open ? '#4CAF50' : '#ff5555');
+
+    // Corpo: base = min(open,close), altura = |close - open|
+    const corpoBase  = velasData.map(v => Math.min(v.open, v.close));
+    const corpoAlto  = velasData.map(v => Math.max(0.0001, Math.abs(v.close - v.open)));
+
+    // Pavio inferior: low → min(open,close)
+    const pavInfBase = velasData.map(v => v.low);
+    const pavInfAlto = velasData.map(v => Math.max(0, Math.min(v.open, v.close) - v.low));
+
+    // Pavio superior: max(open,close) → high
+    const pavSupBase = velasData.map(v => Math.max(v.open, v.close));
+    const pavSupAlto = velasData.map(v => Math.max(0, v.high - Math.max(v.open, v.close)));
+
+    graficoCotacao = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Corpo',
+                    data: corpoAlto, base: corpoBase,
+                    backgroundColor: corVela, borderColor: corBorda,
+                    borderWidth: 1, borderRadius: 1, barPercentage: 0.55,
+                },
+                {
+                    label: 'Pavio Inf',
+                    data: pavInfAlto, base: pavInfBase,
+                    backgroundColor: corBorda, borderColor: corBorda,
+                    borderWidth: 1, barPercentage: 0.07,
+                },
+                {
+                    label: 'Pavio Sup',
+                    data: pavSupAlto, base: pavSupBase,
+                    backgroundColor: corBorda, borderColor: corBorda,
+                    borderWidth: 1, barPercentage: 0.07,
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1a1a1a', borderColor: '#333', borderWidth: 1,
+                    titleColor: '#a0a0a0', bodyColor: '#e0e0e0', padding: 12,
+                    callbacks: {
+                        title: items => 'USDT/BRL — ' + labels[items[0].dataIndex],
+                        label: item => {
+                            if (item.datasetIndex !== 0) return null;
+                            const v = velasData[item.dataIndex];
+                            return [
+                                ` Abertura:    R$ ${fmtCot(v.open)}`,
+                                ` Fechamento:  R$ ${fmtCot(v.close)}`,
+                                ` Máxima:      R$ ${fmtCot(v.high)}`,
+                                ` Mínima:      R$ ${fmtCot(v.low)}`,
+                            ];
+                        },
+                        filter: item => item.datasetIndex === 0,
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: false,
+                    grid:  { color: 'rgba(255,255,255,.04)' },
+                    ticks: { color: '#555', maxTicksLimit: 12, font: { size: 11 } }
+                },
+                y: {
+                    grid:  { color: 'rgba(255,255,255,.04)' },
+                    ticks: { color: '#888', font: { size: 11 }, callback: v => 'R$ ' + fmtCot(v) }
+                }
+            }
+        }
+    });
+}
+
+// ── Calculadora de Spread (simplificada) ─────────────────────
 function calcularSpread() {
     const elMercado = document.getElementById('calc-mercado');
     const elFinal   = document.getElementById('calc-preco-final');
@@ -1236,15 +1517,15 @@ function calcularSpread() {
         const precoFinal = cotacaoAtual * (1 + spreadPct / 100);
         const spreadRs   = precoFinal - cotacaoAtual;
 
-        elFinal.textContent    = 'R$ ' + fmtCot(precoFinal);
+        elFinal.textContent   = 'R$ ' + fmtCot(precoFinal);
         elSpreadRs.textContent = 'R$ ' + fmtCot(spreadRs);
     } else {
-        elFinal.textContent    = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
+        elFinal.textContent   = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
         elSpreadRs.textContent = '—';
     }
 }
 
-// ── 5. Ferramentas de Cópia e Exportação ─────────────────────
+// ── Copiar cotação com spread ─────────────────────────────────
 function copiarCotacao() {
     const el = document.getElementById('calc-preco-final');
     const texto = el?.textContent.replace('R$ ','').trim();
@@ -1263,6 +1544,7 @@ function gerarPrintCotacao() {
     const mercado = mercEl?.textContent || '—';
     const hora    = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
+    // Abre nova janela com o print profissional
     const w = window.open('','_blank','width=540,height=400');
     w.document.write(`<!DOCTYPE html>
 <html>
@@ -1308,17 +1590,16 @@ function gerarPrintCotacao() {
     w.document.close();
 }
 
-// ── 6. Modais ────────────────────────────────────────────────
-document.getElementById('btn-abrir-share')?.addEventListener('click', () => {
+// ── Modal compartilhar ────────────────────────────────────────
+document.getElementById('btn-abrir-share').addEventListener('click', () => {
     const url = window.location.href.replace(/[^/]*$/, '') + 'cotacao-cliente.html';
     document.getElementById('link-cliente-url').textContent = url;
     const modal = document.getElementById('modal-share');
-    if (modal) modal.style.display = 'flex';
+    modal.style.display = 'flex';
 });
 
 function fecharModal() {
-    const modal = document.getElementById('modal-share');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('modal-share').style.display = 'none';
 }
 
 function copiarLink() {
@@ -1333,11 +1614,12 @@ function abrirPaginaCliente() {
     fecharModal();
 }
 
-document.getElementById('modal-share')?.addEventListener('click', function(e) {
+// Fechar modal clicando fora
+document.getElementById('modal-share').addEventListener('click', function(e) {
     if (e.target === this) fecharModal();
 });
 
-// ── 7. UTIL: DRAG TO SCROLL ──────────────────────────────────
+// ── UTIL: DRAG TO SCROLL ────────────────────────────────────
 function dragScroll(el) {
     if (!el) return;
     let down=false, sx, sl;
