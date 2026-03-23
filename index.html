@@ -74,86 +74,111 @@
 
     <!-- ═══════════════ HOME ═══════════════ -->
     <section class="page-section active" id="page-home">
-        <div class="section-header">
+
+        <!-- Header: saudação + data -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 id="home-greeting">Bem-vindo</h1>
-                <p id="home-date"></p>
+                <h1 id="home-greeting" style="font-size:1.6rem;font-weight:700;margin:0;">Bem-vindo</h1>
+                <p style="color:#555;font-size:.82rem;margin-top:4px;">AXONE FX Suite — Painel de Controle</p>
+            </div>
+            <div style="text-align:right;">
+                <div id="home-date" style="font-size:.85rem;color:#a0a0a0;font-weight:500;"></div>
+                <div id="home-time" style="font-size:1.4rem;font-weight:700;color:#fff;letter-spacing:.04em;margin-top:2px;"></div>
             </div>
         </div>
 
-        <!-- KPI Cards -->
-        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:24px;">
+        <!-- KPI Cards — 3 colunas principais -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;">
             <div class="card" style="border-color:rgba(76,175,80,.3);">
                 <h3>Saldo Disponível</h3>
-                <div class="value" style="color:#4CAF50;" id="home-saldo">0,00 USDT</div>
-                <div class="subtitle">USDT em estoque para vender</div>
-            </div>
-            <div class="card" style="border-color:rgba(33,150,243,.3);">
-                <h3>Volume do Mês</h3>
-                <div class="value" style="color:#2196F3;" id="home-volume-mes">0,00 USDT</div>
-                <div class="subtitle">Total negociado no mês atual</div>
+                <div class="value" style="color:#4CAF50;font-size:1.3rem;" id="home-saldo">0,00 USDT</div>
+                <div class="subtitle">Em estoque para vender</div>
             </div>
             <div class="card highlight">
                 <h3>Lucro do Mês</h3>
-                <div class="value" id="home-lucro-mes">R$ 0,00</div>
-                <div class="subtitle">Spread acumulado no mês</div>
+                <div class="value" style="font-size:1.3rem;" id="home-lucro-mes">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado</div>
+            </div>
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Volume do Mês</h3>
+                <div class="value" style="color:#2196F3;font-size:1.3rem;" id="home-volume-mes">0,00 USDT</div>
+                <div class="subtitle">Total negociado</div>
             </div>
             <div class="card" style="border-color:rgba(255,193,7,.25);">
-                <h3>Operações Abertas</h3>
-                <div class="value" style="color:#ffc107;" id="home-ops-abertas">0</div>
+                <h3>Ops. Abertas</h3>
+                <div class="value" style="color:#ffc107;font-size:1.3rem;" id="home-ops-abertas">0</div>
                 <div class="subtitle">Processing + Payment Pending</div>
             </div>
             <div class="card" style="border-color:rgba(255,152,0,.3);">
                 <h3>Asset Pending</h3>
-                <div class="value" style="color:#ff9800;" id="home-asset-pending">0,00 USDT</div>
-                <div class="subtitle">USDT que você deve aos clientes</div>
+                <div class="value" style="color:#ff9800;font-size:1.3rem;" id="home-asset-pending">0,00 USDT</div>
+                <div class="subtitle">USDT a enviar clientes</div>
             </div>
             <div class="card" style="border-color:rgba(255,85,85,.25);">
-                <h3>A Pagar Fornecedor</h3>
-                <div class="value" style="color:#ff5555;" id="home-a-pagar">R$ 0,00</div>
-                <div class="subtitle">BRL pendente ao fornecedor</div>
+                <h3>A Pagar Forn.</h3>
+                <div class="value" style="color:#ff5555;font-size:1.3rem;" id="home-a-pagar">R$ 0,00</div>
+                <div class="subtitle">BRL pendente</div>
             </div>
         </div>
 
-        <!-- Linha: últimas operações + resumo rápido -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap;" class="home-grid">
+        <!-- Gráficos -->
+        <div class="home-grid" style="margin-bottom:24px;">
+            <div class="chart-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="font-size:.9rem;margin:0;">Lucro dos Últimos 30 Dias</h3>
+                    <span style="font-size:.72rem;color:#555;">R$ por dia</span>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="home-chart-lucro"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="font-size:.9rem;margin:0;">Volume Negociado (30 dias)</h3>
+                    <span style="font-size:.72rem;color:#555;">USDT por dia</span>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="home-chart-volume"></canvas>
+                </div>
+            </div>
+        </div>
 
-            <!-- Últimas operações -->
+        <!-- Tabelas lado a lado -->
+        <div class="home-grid">
             <div class="table-card">
-                <div class="section-header" style="margin-bottom:16px;">
-                    <h2 style="font-size:1rem;">Últimas Operações</h2>
-                    <a href="#" data-page="operacoes" class="home-link" style="font-size:.8rem;color:#555;">Ver todas →</a>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h2 style="font-size:.9rem;margin:0;">Últimas Operações</h2>
+                    <a href="#" data-page="operacoes" class="home-link">Ver todas →</a>
                 </div>
                 <table style="width:100%;">
                     <thead><tr>
-                        <th style="font-size:.75rem;padding:6px 10px;">Data</th>
-                        <th style="font-size:.75rem;padding:6px 10px;">Cliente</th>
-                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">USDT</th>
-                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Lucro</th>
-                        <th style="font-size:.75rem;padding:6px 10px;">Status</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Cliente</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Lucro</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Status</th>
                     </tr></thead>
                     <tbody id="home-tabela-ops"></tbody>
                 </table>
             </div>
-
-            <!-- Últimas compras fornecedor -->
             <div class="table-card">
-                <div class="section-header" style="margin-bottom:16px;">
-                    <h2 style="font-size:1rem;">Últimas Compras</h2>
-                    <a href="#" data-page="fornecedor" class="home-link" style="font-size:.8rem;color:#555;">Ver todas →</a>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h2 style="font-size:.9rem;margin:0;">Últimas Compras</h2>
+                    <a href="#" data-page="fornecedor" class="home-link">Ver todas →</a>
                 </div>
                 <table style="width:100%;">
                     <thead><tr>
-                        <th style="font-size:.75rem;padding:6px 10px;">Data</th>
-                        <th style="font-size:.75rem;padding:6px 10px;">Fornecedor</th>
-                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">USDT</th>
-                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Cotação</th>
-                        <th style="font-size:.75rem;padding:6px 10px;text-align:right;">Saldo</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Fornecedor</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Cotação</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Saldo</th>
                     </tr></thead>
                     <tbody id="home-tabela-compras"></tbody>
                 </table>
             </div>
         </div>
+
     </section>
 
     <section class="page-section" id="page-fornecedor">
@@ -369,7 +394,7 @@
     <section class="page-section" id="page-lucro">
 
         <div class="section-header">
-            <div><h1>Dashboard de Lucro</h1><p>Spread entre compra (fornecedor) e venda (cliente)</p></div>
+            <div><h1>Dashboard de Lucro</h1><p>Resultado financeiro do período</p></div>
             <div class="period-selector">
                 <button class="period-btn active" data-period="semana">Semanal</button>
                 <button class="period-btn" data-period="mes">Mensal</button>
@@ -380,22 +405,32 @@
         <!-- Cards KPI -->
         <div class="lucro-cards">
             <div class="lucro-card green">
-                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Lucro Total (Spread)</div>
+                <div class="lc-label">Lucro Bruto (Spread)</div>
                 <div class="lc-val" id="lc-lucro-total">R$ 0,00</div>
                 <div class="lc-sub">Diferença cot. compra vs venda</div>
             </div>
+            <div class="lucro-card" style="border-color:rgba(255,85,85,.3);">
+                <div class="lc-label">Total de Despesas</div>
+                <div class="lc-val" style="color:#ff5555;" id="lc-despesas">R$ 0,00</div>
+                <div class="lc-sub">Registradas no período</div>
+            </div>
+            <div class="lucro-card" style="border-color:rgba(33,150,243,.3);">
+                <div class="lc-label">Lucro Líquido</div>
+                <div class="lc-val" style="color:#2196F3;" id="lc-lucro-liquido">R$ 0,00</div>
+                <div class="lc-sub">Spread menos despesas</div>
+            </div>
             <div class="lucro-card blue">
-                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Volume Negociado</div>
+                <div class="lc-label">Volume Negociado</div>
                 <div class="lc-val" id="lc-volume">0,00 USDT</div>
-                <div class="lc-sub">Total comprado e vendido</div>
+                <div class="lc-sub">Total operado no período</div>
             </div>
             <div class="lucro-card yellow">
-                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Spread Médio</div>
+                <div class="lc-label">Spread Médio</div>
                 <div class="lc-val" id="lc-spread-medio">R$ 0,00</div>
                 <div class="lc-sub">Por USDT negociado</div>
             </div>
-            <div class="lucro-card" style="border-color:rgba(224,224,224,.2);">
-                <div class="lc-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>Operações</div>
+            <div class="lucro-card" style="border-color:rgba(224,224,224,.15);">
+                <div class="lc-label">Operações</div>
                 <div class="lc-val" id="lc-qtd-ops" style="color:#e0e0e0;">0</div>
                 <div class="lc-sub">No período selecionado</div>
             </div>
@@ -409,8 +444,55 @@
             </div>
         </div>
 
-        <!-- Tabela detalhada spread -->
+        <!-- Despesas -->
         <div class="section-header" style="margin-top:8px;">
+            <h2>Despesas</h2>
+        </div>
+        <div class="op-card">
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Descrição</label>
+                    <input type="text" id="desp-desc" placeholder="Ex: Aluguel, Energia, Funcionário...">
+                </div>
+                <div class="input-group">
+                    <label>Valor (R$)</label>
+                    <input type="text" id="desp-valor" placeholder="0,00">
+                </div>
+                <div class="input-group">
+                    <label>Data</label>
+                    <input type="date" id="desp-data">
+                </div>
+                <div class="input-group">
+                    <label>Categoria</label>
+                    <select id="desp-categoria">
+                        <option value="operacional">Operacional</option>
+                        <option value="pessoal">Pessoal</option>
+                        <option value="tecnologia">Tecnologia</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+            </div>
+            <div class="action-row" style="margin-top:16px;">
+                <button class="btn-primary" id="btn-add-despesa">+ Registrar Despesa</button>
+            </div>
+        </div>
+
+        <div class="table-card" style="margin-top:8px;">
+            <div class="table-responsive">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Descrição</th><th>Categoria</th>
+                        <th style="text-align:right;">Valor (R$)</th><th>Ações</th>
+                    </tr></thead>
+                    <tbody id="tabela-despesas">
+                        <tr><td colspan="5" class="empty-state">Nenhuma despesa registrada.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabela operações -->
+        <div class="section-header" style="margin-top:24px;">
             <h2>Detalhamento por Operação</h2>
         </div>
         <div class="table-card">
@@ -569,7 +651,6 @@
         <div class="section-header">
             <div>
                 <h1>Operações</h1>
-                <p><span id="op-typing-text"></span><span id="op-typing-cursor"></span></p>
             </div>
             <div class="header-actions" style="display:flex;gap:10px;">
                 <button class="btn-secondary" id="btn-exportar-op" style="font-size:.82rem;padding:8px 16px;">Exportar PDF</button>
