@@ -313,25 +313,30 @@
     <section class="page-section" id="page-clientes">
 
         <div class="section-header">
-            <div><h1>Clientes</h1><p>Gerencie saldos, envios e histórico por cliente</p></div>
+            <div><h1>Clientes</h1><p>Carteira de clientes e histórico de operações</p></div>
         </div>
 
         <!-- Cards resumo clientes -->
         <div class="cards-grid">
-            <div class="card">
-                <h3>Total de Clientes Ativos</h3>
-                <div class="value"><span id="cli-total-clientes">0</span></div>
-                <div class="subtitle">cadastrados no sistema</div>
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Total de Clientes</h3>
+                <div class="value" style="color:#2196F3;"><span id="cli-total-clientes">0</span></div>
+                <div class="subtitle">Cadastrados no sistema</div>
             </div>
-            <div class="card">
-                <h3>Volume Vendido (USDT)</h3>
-                <div class="value"><span id="cli-vol-usdt">0,00</span> USDT</div>
-                <div class="subtitle">Recebido: <span id="cli-vol-brl">R$ 0,00</span></div>
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
+                <h3>Volume Vendido</h3>
+                <div class="value" style="color:#4CAF50;"><span id="cli-vol-usdt">0,00</span> USDT</div>
+                <div class="subtitle">Total em R$: <span id="cli-vol-brl">R$ 0,00</span></div>
             </div>
-            <div class="card">
-                <h3>Saldo Total a Enviar</h3>
-                <div class="value" style="color:#ffc107;"><span id="cli-pendente-usdt">0,00</span> USDT</div>
-                <div class="subtitle" style="color:#ff5555;">Pendente de envio aos clientes</div>
+            <div class="card" style="border-color:rgba(255,152,0,.3);">
+                <h3>Asset Pending</h3>
+                <div class="value" style="color:#ff9800;"><span id="cli-pendente-usdt">0,00</span> USDT</div>
+                <div class="subtitle">USDT a enviar aos clientes</div>
+            </div>
+            <div class="card" style="border-color:rgba(76,175,80,.2);">
+                <h3>Lucro Total</h3>
+                <div class="value" style="color:#4CAF50;" id="cli-lucro-total">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado de vendas</div>
             </div>
         </div>
 
@@ -362,7 +367,7 @@
 
         <!-- Histórico clientes -->
         <div class="section-header" style="margin-top:40px;">
-            <h2>Histórico de Vendas a Clientes</h2>
+            <h2>Histórico de Vendas</h2>
             <div class="filter-row" style="margin-bottom:0;">
                 <label>Cliente:</label>
                 <select id="filtro-cliente-hist" style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:7px 12px;border-radius:7px;font-size:.85rem;outline:none;">
@@ -378,11 +383,11 @@
                 <table>
                     <thead><tr>
                         <th>Data</th><th>Hora</th><th>Cliente</th>
-                        <th>USDT Vendido</th><th>Cotação Venda</th><th>Total (R$)</th>
-                        <th>Pago (R$)</th><th>Saldo USDT</th><th>Status Envio</th><th>Ações</th>
+                        <th>USDT</th><th>Cot. Venda</th><th>Total (R$)</th>
+                        <th>Lucro</th><th>Status</th>
                     </tr></thead>
                     <tbody id="tabela-clientes">
-                        <tr><td colspan="10" class="empty-state">Nenhuma venda registrada ainda.</td></tr>
+                        <tr><td colspan="8" class="empty-state">Nenhuma venda registrada ainda.</td></tr>
                     </tbody>
                 </table>
             </div>
