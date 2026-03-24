@@ -7,7 +7,7 @@
     if (sessionStorage.getItem('kroma_autenticado') !== 'true') {
         window.location.href = 'login.html';
     }
-    const u = sessionStorage.getItem('kroma_usuario') || 'gestor';
+    const u = sessionStorage.getItem('kroma_usuario') || 'admin';
     const nome = u.charAt(0).toUpperCase() + u.slice(1);
     ['nome-usuario','nome-usuario-mobile'].forEach(id => {
         const el = document.getElementById(id);
@@ -530,7 +530,7 @@ function renderHome() {
     // ── Saudação + data + relógio ─────────────────────────────
     const hora  = new Date().getHours();
     const greet = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
-    const usuario = sessionStorage.getItem('kroma_usuario') || 'gestor';
+    const usuario = sessionStorage.getItem('kroma_usuario') || 'admin';
     const nome    = usuario.charAt(0).toUpperCase() + usuario.slice(1);
     const elG = document.getElementById('home-greeting');
     if (elG) elG.textContent = `${greet}, ${nome}`;
@@ -539,7 +539,7 @@ function renderHome() {
     if (elD) elD.textContent = new Date().toLocaleDateString('pt-BR',
         { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
-    // Relógio em tempo real
+    // Relógio discreto — mesmo tamanho da data
     if (!homeClockTick) {
         homeClockTick = setInterval(() => {
             const elT = document.getElementById('home-time');
@@ -548,6 +548,38 @@ function renderHome() {
     }
     const elT = document.getElementById('home-time');
     if (elT) elT.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+    // ── Tagline com fade suave entre frases ───────────────────
+    if (!window._taglineInit) {
+        window._taglineInit = true;
+        const frases = [
+            'Inteligência de mercado ao seu alcance.',
+            'Controle total das suas operações.',
+            'Spread calculado automaticamente.',
+            'Decisões mais inteligentes.',
+            'A plataforma dos grandes operadores.',
+            'Saldos sempre atualizados.',
+            'Conciliação ágil e precisa.',
+            'Sua operação em alto nível.',
+            'O futuro do OTC é aqui.',
+            'Segurança em cada transação.',
+            'Excelência em cada detalhe.',
+        ];
+        let fi = 0;
+        const elTag = document.getElementById('home-tagline');
+        if (elTag) {
+            setInterval(() => {
+                elTag.classList.remove('fade-in');
+                elTag.classList.add('fade-out');
+                setTimeout(() => {
+                    fi = (fi + 1) % frases.length;
+                    elTag.textContent = frases[fi];
+                    elTag.classList.remove('fade-out');
+                    elTag.classList.add('fade-in');
+                }, 650);
+            }, 4000);
+        }
+    }
 
     // ── KPIs ─────────────────────────────────────────────────
     const mesAtual  = new Date().toLocaleDateString('pt-BR').slice(3);
