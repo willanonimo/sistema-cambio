@@ -957,82 +957,63 @@ function carregarClientes() {
         return `${p[2]}/${p[1]}/${p[0]}`;
     })();
 
-    // Usa opOperacoes como fonte principal do histórico
-    // Só mostra linhas que têm cliente preenchido
-    let dados = opOperacoes
-        .filter(o => o.cliente)
-        .map(o => ({
-            data:         o.data,
-            hora:         o.hora || '—',
-            cliente:      o.cliente,
-            usdt:         o.usdt || 0,
-            cotacaoVenda: o.cotVenda || 0,
-            totalBrl:     o.totalVenda || 0,
-            pagoBrl:      0, // campo futuro
-            statusEnvio:  o.status === 'nos_devemos' ? 'pendente' : (o.status === 'concluida' ? 'enviado' : 'pendente'),
-            lucro:        o.lucro || 0,
-            ref:          o.ref,
-        }));
-
+    // Fonte: opOperacoes — só linhas com cliente preenchido
+    let dados = opOperacoes.filter(o => o.cliente);
     if (filtCli)  dados = dados.filter(o => o.cliente === filtCli);
     if (filtData) dados = dados.filter(o => o.data === filtData);
 
     tbClientes.innerHTML = '';
-
     if (!dados.length) {
-        tbClientes.innerHTML = '<tr><td colspan="10" class="empty-state">Nenhuma venda registrada ainda.</td></tr>';
+        tbClientes.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma venda registrada ainda.</td></tr>';
     }
 
-    // Status label e cor por status da operação
-    const statusMap = {
-        concluida:   { cls:'enviado',  txt:'Settled'         },
-        andamento:   { cls:'parcial',  txt:'Processing'      },
-        falta_pagar: { cls:'pendente', txt:'Payment Pending' },
-        nos_devemos: { cls:'pendente', txt:'Asset Pending'   },
-        cancelada:   { cls:'',         txt:'Voided'          },
-    };
+    const statusCores = { concluida:'#4CAF50', andamento:'#2196F3', falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555' };
+    const statusNomes = { concluida:'Settled', andamento:'Processing', falta_pagar:'Payment Pending', nos_devemos:'Asset Pending', cancelada:'Voided' };
 
-    let totUsdt=0, totVenda=0, totPend=0;
+    let totUsdt=0, totVenda=0, totLucro=0;
+
     dados.forEach(op => {
-        totUsdt  += op.usdt || 0;
-        totVenda += op.totalBrl || 0;
-        // Card "Saldo a Enviar": só quando NÓS devemos ao cliente
-        if (op.statusEnvio === 'pendente') totPend += op.usdt || 0;
+        totUsdt  += op.usdt      || 0;
+        totVenda += op.totalVenda|| 0;
+        totLucro += op.lucro     || 0;
 
-        const sm  = statusMap[op.status] || { cls:'pendente', txt: op.status };
-        const cor = op.status === 'concluida' ? '#4CAF50'
-                  : op.status === 'nos_devemos' ? '#ff9800'
-                  : op.status === 'falta_pagar' ? '#ffc107'
-                  : op.status === 'cancelada'   ? '#ff5555'
-                  : '#2196F3';
+        // Asset Pending = status nos_devemos
+        const cor = statusCores[op.status] || '#888';
+        const txt = statusNomes[op.status] || op.status;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${op.data}</td>
-            <td>${op.hora}</td>
+            <td>${op.data || '—'}</td>
+            <td>${op.hora || '—'}</td>
             <td style="font-weight:600;">${op.cliente}</td>
             <td style="color:#4CAF50;font-weight:700;">${fmtDisplay(op.usdt)}</td>
-            <td>${op.cotacaoVenda ? 'R$ '+fmtCot(op.cotacaoVenda) : '—'}</td>
-            <td>${op.totalBrl ? 'R$ '+fmtDisplay(op.totalBrl) : '—'}</td>
-            <td style="color:${op.lucro>0?'#4CAF50':'#888'};font-weight:700;">
+            <td>${op.cotVenda ? 'R$ '+fmtCot(op.cotVenda) : '—'}</td>
+            <td>${op.totalVenda ? 'R$ '+fmtDisplay(op.totalVenda) : '—'}</td>
+            <td style="color:${(op.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
                 ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
             </td>
             <td>
-                <span class="badge-status ${sm.cls}" style="color:${cor};background:${cor}22;border-color:${cor}44;">
-                    ${sm.txt}
+                <span class="badge-status" style="color:${cor};background:${cor}22;border:1px solid ${cor}44;
+                    display:inline-block;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:700;">
+                    ${txt}
                 </span>
-            </td>
-            <td>—</td>`;
+            </td>`;
         tbClientes.appendChild(tr);
     });
 
-    // Cards
-    const pendOps = opOperacoes.filter(o => o.cliente && o.status === 'nos_devemos');
-    const pendUsdt = pendOps.reduce((a,o) => a+(o.usdt||0), 0);
-    document.getElementById('cli-total-clientes').textContent   = cadastrosCli.length;
-    document.getElementById('cli-vol-usdt').textContent         = fmtDisplay(totUsdt);
-    document.getElementById('cli-vol-brl').textContent          = 'R$ '+fmtDisplay(totVenda);
-    document.getElementById('cli-pendente-usdt').textContent    = fmtDisplay(pendUsdt);
+    // Cards — calculados sobre TODOS (sem filtro) para refletir a realidade
+    const todosCli   = opOperacoes.filter(o => o.cliente);
+    const pendUsdt   = todosCli.filter(o => o.status==='nos_devemos').reduce((a,o)=>a+(o.usdt||0),0);
+    const totalUsdt  = todosCli.reduce((a,o)=>a+(o.usdt||0),0);
+    const totalVenda = todosCli.reduce((a,o)=>a+(o.totalVenda||0),0);
+    const totalLucro = todosCli.reduce((a,o)=>a+(o.lucro||0),0);
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('cli-total-clientes', cadastrosCli.length);
+    set('cli-vol-usdt',       fmtDisplay(totalUsdt));
+    set('cli-vol-brl',        'R$ '+fmtDisplay(totalVenda));
+    set('cli-pendente-usdt',  fmtDisplay(pendUsdt));
+    set('cli-lucro-total',    'R$ '+fmtDisplay(totalLucro));
 }
 
 if (filtroCliHist) filtroCliHist.addEventListener('change', carregarClientes);
