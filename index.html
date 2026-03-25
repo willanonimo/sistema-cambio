@@ -738,40 +738,33 @@
         </div>
 
         <!-- Tabela estilo Excel -->
-        <div class="table-card" style="margin-top:24px;">
-            <div class="table-responsive" id="drag-operacoes">
-                <table id="tabela-op-excel">
-                    <thead>
-                        <tr>
-                            <th style="width:110px;text-align:left;">Data</th>
-                            <th style="width:150px;text-align:left;">Status</th>
-                            <th style="width:150px;text-align:left;">Cliente</th>
-                            <th style="width:130px;text-align:right;padding-right:14px;">Valor USDT</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Compra</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Venda</th>
-                            <th style="width:140px;text-align:right;padding-right:14px;">Total Compra</th>
-                            <th style="width:130px;text-align:right;padding-right:14px;">Total Venda</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Lucro</th>
-                            <th style="width:70px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-operacoes">
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="10" style="padding:10px 12px;">
-                                <button class="btn-secondary" id="btn-nova-linha-op" style="font-size:.82rem;padding:7px 18px;display:flex;align-items:center;gap:6px;">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                    Nova Linha
-                                </button>
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    </section>
-
+        <div class="table-responsive" id="drag-operacoes">
+    <table id="tabela-op-excel">
+        <thead>
+            <tr>
+                <th style="width:110px;">Data</th>
+                <th style="width:150px;">Status</th>
+                <th style="width:150px;">Cliente</th>
+                <th style="width:130px;text-align:right;">Valor USDT</th>
+                <th style="width:120px;text-align:right;">Cot. Venda</th>
+                <th style="width:120px;text-align:right;">Lucro</th>
+                <th style="width:70px;">Ações</th>
+            </tr>
+        </thead>
+        <tbody id="tabela-operacoes">
+            </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="7" style="padding:10px 12px;">
+                    <button class="btn-secondary" id="btn-nova-linha-op" style="font-size:.82rem;padding:7px 18px;display:flex;align-items:center;gap:6px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Nova Linha
+                    </button>
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
 
 </div><!-- /main-content -->
 
