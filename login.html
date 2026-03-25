@@ -142,6 +142,8 @@
     // ================================================
     // CREDENCIAIS DE ACESSO — altere aqui se precisar
     // ================================================
+  <script>
+    // CREDENCIAIS AXONE
     const CREDENCIAIS = [
         { usuario: "admin", senha: "will007", expira: null }
     ];
@@ -152,19 +154,14 @@
         const usuario = document.getElementById('campo-usuario').value.trim().toLowerCase();
         const senha   = document.getElementById('campo-senha').value;
         const msgErro = document.getElementById('msg-erro');
-        const hoje    = new Date().toISOString().split('T')[0];
 
-        const conta  = CREDENCIAIS.find(c => c.usuario === usuario && c.senha === senha);
-        const valido = conta && (conta.expira === null || conta.expira >= hoje);
+        const conta = CREDENCIAIS.find(c => c.usuario === usuario && c.senha === senha);
 
-        if (valido) {
-            sessionStorage.setItem('kroma_autenticado', 'true');
-            sessionStorage.setItem('kroma_usuario', usuario);
+        if (conta) {
+            // AQUI É ONDE MUDAMOS OS NOMES PARA AXONE
+            sessionStorage.setItem('axone_auth', 'true');
+            sessionStorage.setItem('axone_user', usuario);
             window.location.href = 'index.html';
-        } else if (conta && conta.expira && conta.expira < hoje) {
-            msgErro.textContent = 'Acesso expirado. Entre em contato com o administrador.';
-            msgErro.style.display = 'block';
-            document.getElementById('campo-senha').value = '';
         } else {
             msgErro.textContent = 'Usuário ou senha incorretos.';
             msgErro.style.display = 'block';
@@ -173,8 +170,8 @@
         }
     });
 
-    // Se já está logado, vai direto ao dashboard
-    if (sessionStorage.getItem('kroma_autenticado') === 'true') {
+    // Se já está logado com o novo padrão, vai direto
+    if (sessionStorage.getItem('axone_auth') === 'true') {
         window.location.href = 'index.html';
     }
 </script>
