@@ -58,6 +58,16 @@ function navegarPara(page) {
     document.getElementById('nav-drawer')?.classList.remove('open');
 }
 
+// ── ESCUTAR CLIQUES NO MENU ──────────────────────────────────
+document.addEventListener('click', e => {
+    const link = e.target.closest('[data-page]');
+    if (!link) return;
+    
+    e.preventDefault();
+    const page = link.dataset.page;
+    navegarPara(page);
+});
+
 // ── 3. MÓDULO OPERAÇÕES (ESTILO EXCEL + CLOUD) ────────────────
 function renderTabelaOperacoes() {
     const tb = document.getElementById('tabela-operacoes');
