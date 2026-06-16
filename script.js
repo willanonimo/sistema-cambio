@@ -1,181 +1,786 @@
-// ============================================================
-// AXONE — FX MANAGEMENT SUITE  |  script.js v3.2 (FULL DATABASE)
-// ============================================================
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AXONE | FX Suite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-const SUPABASE_URL = 'https://izqfrgccjoxumisrlfcj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6cWZyZ2Njam94dW1pc3JsZmNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjg4ODMsImV4cCI6MjA4OTk0NDg4M30.11PolSu1vLoggcxT3SdkLnFIu3TmF7coyrusVAovg74';
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<!-- ═══════════════ TOP NAV ═══════════════ -->
+<nav class="top-nav">
+    <!-- Logo -->
+    <div class="nav-logo">
+        <div class="line"></div>
+        <div>
+            <div class="kroma">AXONE</div>
+            <div class="cap">FX SUITE</div>
+        </div>
+    </div>
 
-let db = { clientes: [], operacoes: [], fornecedores: [], despesas: [] };
+    <!-- Desktop links (visível só em 900px+) -->
+    <div class="nav-links">
+        <a href="#" class="active" data-page="home">Home</a>
+        <a href="#" data-page="operacoes">Operações</a>
+        <a href="#" data-page="fornecedor">Fornecedor</a>
+        <a href="#" data-page="clientes">Clientes</a>
+        <a href="#" data-page="lucro">Dashboard Lucro</a>
+        <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
+    </div>
 
-// ── 1. INICIALIZAÇÃO ─────────────────────────────────────────
-(async function init() {
-    if (sessionStorage.getItem('axone_auth') !== 'true') {
-        window.location.href = 'login.html';
-        return;
-    }
-    
-    await sincronizarBanco();
-    
-    const user = sessionStorage.getItem('axone_user') || 'Gestor';
-    const nomeFormatado = user.charAt(0).toUpperCase() + user.slice(1);
-    ['nome-usuario','nome-usuario-mobile'].forEach(id => {
-        if (document.getElementById(id)) document.getElementById(id).textContent = nomeFormatado;
-    });
+    <!-- Desktop: ticker + user + logout agrupados à direita -->
+    <div class="nav-right-desktop">
+        <div class="live-ticker" id="nav-ticker">
+            <div class="dot"></div>
+            <span class="label">USDT/BRL</span>
+            <span class="price" id="ticker-price">—</span>
+            <span class="change" id="ticker-change"></span>
+        </div>
+        <span class="nav-user">Olá, <strong id="nome-usuario">Gestor</strong></span>
+        <button class="btn-logout" onclick="logout()">Sair</button>
+    </div>
 
-    navegarPara(sessionStorage.getItem('axone_last_page') || 'home');
-})();
+    <!-- Mobile: ticker compacto + hamburguer -->
+    <div class="live-ticker live-ticker-mobile" id="nav-ticker-mobile">
+        <div class="dot"></div>
+        <span class="price" id="ticker-price-mobile">—</span>
+    </div>
+    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+    </button>
+</nav>
 
-async function sincronizarBanco() {
-    const [c, o] = await Promise.all([
-        _supabase.from('clientes').select('*').order('nome'),
-        _supabase.from('operacoes').select('*').order('created_at', { ascending: false })
-    ]);
-    db.clientes = c.data || [];
-    db.operacoes = o.data || [];
-    atualizarComponentesUI();
-}
+<!-- Drawer mobile -->
+<div class="nav-drawer" id="nav-drawer">
+    <a href="#" class="active" data-page="home">Home</a>
+    <a href="#" data-page="operacoes">Operações</a>
+    <a href="#" data-page="fornecedor">Fornecedor</a>
+    <a href="#" data-page="clientes">Clientes</a>
+    <a href="#" data-page="lucro">Dashboard Lucro</a>
+    <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
+    <hr class="nav-drawer-sep">
+    <div class="nav-drawer-user">
+        <span>Olá, <strong id="nome-usuario-mobile">Gestor</strong></span>
+        <button class="btn-logout" onclick="logout()">Sair</button>
+    </div>
+</div>
 
-function atualizarComponentesUI() {
-    const opts = db.clientes.map(cl => `<option value="${cl.nome}">${cl.nome}</option>`).join('');
-    const selectFiltro = document.getElementById('filtro-cliente-hist');
-    if (selectFiltro) selectFiltro.innerHTML = '<option value="">Todos os Clientes</option>' + opts;
-}
+<!-- ═══════════════ MAIN ═══════════════════ -->
+<div class="main-content">
 
-// ── 2. NAVEGAÇÃO ─────────────────────────────────────────────
-function navegarPara(page) {
-    sessionStorage.setItem('axone_last_page', page);
-    document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll(`[data-page="${page}"]`).forEach(el => el.classList.add('active'));
-    document.querySelectorAll('.page-section').forEach(sec => sec.classList.remove('active'));
-    
-    document.getElementById('page-' + page)?.classList.add('active');
+    <!-- ═══════════════ HOME ═══════════════ -->
+    <section class="page-section active" id="page-home">
 
-    if (page === 'home')      renderHome();
-    if (page === 'clientes')  renderTabelaClientes();
-    if (page === 'operacoes') renderTabelaOperacoes();
-    
-    document.getElementById('nav-drawer')?.classList.remove('open');
-}
+        <!-- Header: saudação + data -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 id="home-greeting" style="font-size:1.5rem;font-weight:700;margin:0;">Bem-vindo</h1>
+                <div id="home-tagline" class="fade-in">Inteligência de mercado ao seu alcance.</div>
+            </div>
+            <div style="text-align:right;">
+                <div id="home-date" style="font-size:.85rem;color:#a0a0a0;font-weight:500;"></div>
+                <div id="home-time"></div>
+            </div>
+        </div>
 
-// ── ESCUTAR CLIQUES NO MENU ──────────────────────────────────
-document.addEventListener('click', e => {
-    const link = e.target.closest('[data-page]');
-    if (!link) return;
-    
-    e.preventDefault();
-    const page = link.dataset.page;
-    navegarPara(page);
-});
+        <!-- KPI Cards — 3 colunas principais -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;">
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
+                <h3>Saldo Disponível</h3>
+                <div class="value" style="color:#4CAF50;font-size:1.3rem;" id="home-saldo">0,00 USDT</div>
+                <div class="subtitle">Em estoque para vender</div>
+            </div>
+            <div class="card highlight">
+                <h3>Lucro do Mês</h3>
+                <div class="value" style="font-size:1.3rem;" id="home-lucro-mes">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado</div>
+            </div>
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Volume do Mês</h3>
+                <div class="value" style="color:#2196F3;font-size:1.3rem;" id="home-volume-mes">0,00 USDT</div>
+                <div class="subtitle">Total negociado</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,193,7,.25);">
+                <h3>Ops. Abertas</h3>
+                <div class="value" style="color:#ffc107;font-size:1.3rem;" id="home-ops-abertas">0</div>
+                <div class="subtitle">Processing + Payment Pending</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,152,0,.3);">
+                <h3>Asset Pending</h3>
+                <div class="value" style="color:#ff9800;font-size:1.3rem;" id="home-asset-pending">0,00 USDT</div>
+                <div class="subtitle">USDT a enviar clientes</div>
+            </div>
+            <div class="card" style="border-color:rgba(255,85,85,.25);">
+                <h3>A Pagar Forn.</h3>
+                <div class="value" style="color:#ff5555;font-size:1.3rem;" id="home-a-pagar">R$ 0,00</div>
+                <div class="subtitle">BRL pendente</div>
+            </div>
+        </div>
 
-// ── 3. MÓDULO OPERAÇÕES (ESTILO EXCEL + CLOUD) ────────────────
-function renderTabelaOperacoes() {
-    const tb = document.getElementById('tabela-operacoes');
-    if (!tb) return;
+        <!-- Gráficos -->
+        <div class="home-grid" style="margin-bottom:24px;">
+            <div class="chart-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="font-size:.9rem;margin:0;">Lucro dos Últimos 30 Dias</h3>
+                    <span style="font-size:.72rem;color:#555;">R$ por dia</span>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="home-chart-lucro"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="font-size:.9rem;margin:0;">Volume Negociado (30 dias)</h3>
+                    <span style="font-size:.72rem;color:#555;">USDT por dia</span>
+                </div>
+                <div class="chart-wrap" style="height:180px;">
+                    <canvas id="home-chart-volume"></canvas>
+                </div>
+            </div>
+        </div>
 
-    tb.innerHTML = db.operacoes.map(op => {
-        const corLucro = op.lucro > 0 ? 'var(--green)' : op.lucro < 0 ? 'var(--red)' : '#888';
-        return `
-        <tr data-id="${op.id}">
-            <td><input class="cell-input" value="${op.data}" onchange="editarOp(${op.id}, 'data', this.value)"></td>
-            <td>
-                <select class="cell-select" onchange="editarOp(${op.id}, 'status', this.value)" style="color:var(--green)">
-                    <option value="concluida" ${op.status==='concluida'?'selected':''}>Settled</option>
-                    <option value="andamento" ${op.status==='andamento'?'selected':''}>Processing</option>
+        <!-- Tabelas lado a lado -->
+        <div class="home-grid">
+            <div class="table-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h2 style="font-size:.9rem;margin:0;">Últimas Operações</h2>
+                    <a href="#" data-page="operacoes" class="home-link">Ver todas →</a>
+                </div>
+                <table style="width:100%;">
+                    <thead><tr>
+                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Cliente</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Lucro</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Status</th>
+                    </tr></thead>
+                    <tbody id="home-tabela-ops"></tbody>
+                </table>
+            </div>
+            <div class="table-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h2 style="font-size:.9rem;margin:0;">Últimas Compras</h2>
+                    <a href="#" data-page="fornecedor" class="home-link">Ver todas →</a>
+                </div>
+                <table style="width:100%;">
+                    <thead><tr>
+                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
+                        <th style="font-size:.72rem;padding:5px 8px;">Fornecedor</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Cotação</th>
+                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Saldo</th>
+                    </tr></thead>
+                    <tbody id="home-tabela-compras"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
+
+    <section class="page-section" id="page-fornecedor">
+
+        <div class="section-header">
+            <div>
+                <h1>Fornecedor</h1>
+                <p id="data-atual"></p>
+            </div>
+        </div>
+
+        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,280px));">
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Volume Comprado (Hoje)</h3>
+                <div class="value" style="color:#2196F3;"><span id="card-vol-usdt">0,00</span> USDT</div>
+                <div class="subtitle">Investido: <span id="card-vol-brl">R$ 0,00</span></div>
+            </div>
+            <div class="card" style="border-color:rgba(255,193,7,.25);">
+                <h3>Fluxo Fornecedor (USDT)</h3>
+                <div class="value" style="color:#ffc107;"><span id="card-forn-comprado">0,00</span> USDT</div>
+                <div class="subtitle" style="color:#ff5555;">Pendente a receber: <span id="card-forn-pendente">0,00</span></div>
+            </div>
+            <div class="card" style="border-color:rgba(255,85,85,.25);">
+                <h3>Contas a Pagar (BRL)</h3>
+                <div class="value" style="color:#e0e0e0;"><span id="card-pagar-enviado">R$ 0,00</span></div>
+                <div class="subtitle" style="color:#ff5555;">Pendente a enviar: <span id="card-pagar-pendente">R$ 0,00</span></div>
+            </div>
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
+                <h3>Saldo Disponível</h3>
+                <div class="value" style="color:#4CAF50;" id="card-saldo-disponivel">0,00 USDT</div>
+                <div class="subtitle">USDT em estoque (não vendido)</div>
+            </div>
+        </div>
+
+        <!-- Formulário Fornecedor -->
+        <div class="op-card">
+
+            <!-- Bloco 0: Fornecedor -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="1"/></svg>
+                Fornecedor
+            </div>
+            <div class="form-grid" style="margin-bottom:16px;">
+                <div class="input-group">
+                    <label>Selecionar Fornecedor</label>
+                    <select id="select-fornecedor"><option value="">— Selecione —</option></select>
+                </div>
+                <div class="input-group">
+                    <label>Cadastrar Novo Fornecedor</label>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" placeholder="Nome do fornecedor" id="input-novo-fornecedor" style="flex:1;">
+                        <button class="btn-secondary" id="btn-add-fornecedor" style="padding:0 16px;white-space:nowrap;font-size:.82rem;">+ Adicionar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-divider"></div>
+
+            <!-- Bloco 1: Compra -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                Compra
+            </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Valor Comprado (USDT)</label>
+                    <input type="text" placeholder="0,00" id="valor-comprado">
+                </div>
+                <div class="input-group">
+                    <label>Cotação de Compra (R$)</label>
+                    <input type="text" placeholder="0,00" id="cotacao">
+                </div>
+                <div class="input-group">
+                    <label>Total Automático (R$)</label>
+                    <input type="text" placeholder="0,00" id="total-automatico" disabled>
+                </div>
+            </div>
+
+            <div class="form-divider"></div>
+
+            <!-- Bloco 2: Pagamento -->
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                Pagamento
+            </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Valor Pago (R$)</label>
+                    <input type="text" placeholder="0,00" id="valor-pix">
+                </div>
+                <div class="input-group">
+                    <label>Referência</label>
+                    <input type="text" placeholder="Ex: TED Lote 01, Pix Ref. 22..." id="referencia-pix">
+                </div>
+            </div>
+
+            <div class="action-row" style="margin-top:24px;">
+                <button class="btn-primary" id="btn-registrar">Registrar Operação</button>
+                <button class="btn-danger"  id="btn-cancelar"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar</button>
+            </div>
+        </div>
+
+        <!-- Histórico Fornecedor -->
+        <div class="section-header" style="margin-top:40px;">
+            <h2>Histórico de Operações</h2>
+            <div class="filter-row" style="margin-bottom:0;">
+                <label>Filtrar:</label>
+                <input type="date" id="filtro-data">
+                <button class="btn-small del" id="btn-limpar-filtro" style="display:none;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                <button class="btn-secondary" id="btn-exportar-pdf" style="padding:8px 16px; font-size:.82rem;">Exportar PDF</button>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <div class="table-responsive" id="drag-fornecedor">
+                <table>
+                    <thead><tr>
+                        <th>Data / Fornecedor</th><th>Hora</th><th>USDT Comprado</th>
+                        <th>Cotação</th><th>Total (R$)</th><th>Valor Pago</th>
+                        <th>Saldo Disponível</th><th>Falta Receber</th><th>Ações</th>
+                    </tr></thead>
+                    <tbody id="tabela-historico">
+                        <tr><td colspan="9" class="empty-state">Nenhuma operação registrada ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ─── PÁGINA 2: CLIENTES ────────────── -->
+    <section class="page-section" id="page-clientes">
+
+        <div class="section-header">
+            <div><h1>Clientes</h1><p>Carteira de clientes e histórico de operações</p></div>
+        </div>
+
+        <!-- Cards resumo clientes -->
+        <div class="cards-grid">
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Total de Clientes</h3>
+                <div class="value" style="color:#2196F3;"><span id="cli-total-clientes">0</span></div>
+                <div class="subtitle">Cadastrados no sistema</div>
+            </div>
+            <div class="card" style="border-color:rgba(76,175,80,.3);">
+                <h3>Volume Vendido</h3>
+                <div class="value" style="color:#4CAF50;"><span id="cli-vol-usdt">0,00</span> USDT</div>
+                <div class="subtitle">Total em R$: <span id="cli-vol-brl">R$ 0,00</span></div>
+            </div>
+            <div class="card" style="border-color:rgba(255,152,0,.3);">
+                <h3>Asset Pending</h3>
+                <div class="value" style="color:#ff9800;"><span id="cli-pendente-usdt">0,00</span> USDT</div>
+                <div class="subtitle">USDT a enviar aos clientes</div>
+            </div>
+            <div class="card" style="border-color:rgba(76,175,80,.2);">
+                <h3>Lucro Total</h3>
+                <div class="value" style="color:#4CAF50;" id="cli-lucro-total">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado de vendas</div>
+            </div>
+        </div>
+
+        <!-- Cadastro de clientes -->
+        <div class="op-card">
+            <div class="form-section-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Cadastrar Cliente
+            </div>
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Nome Completo</label>
+                    <input type="text" placeholder="Ex: João da Silva" id="cad-nome">
+                </div>
+                <div class="input-group">
+                    <label>Contato (WhatsApp / e-mail)</label>
+                    <input type="text" placeholder="Ex: (11) 9 9999-0000" id="cad-contato">
+                </div>
+                <div class="input-group">
+                    <label>Observação</label>
+                    <input type="text" placeholder="Ex: Cliente VIP" id="cad-obs">
+                </div>
+            </div>
+            <div class="action-row" style="margin-top:20px;">
+                <button class="btn-primary" id="btn-cadastrar-cliente">Cadastrar</button>
+            </div>
+        </div>
+
+        <!-- Histórico clientes -->
+        <div class="section-header" style="margin-top:40px;">
+            <h2>Histórico de Vendas</h2>
+            <div class="filter-row" style="margin-bottom:0;">
+                <label>Cliente:</label>
+                <select id="filtro-cliente-hist" style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:7px 12px;border-radius:7px;font-size:.85rem;outline:none;">
+                    <option value="">Todos</option>
                 </select>
-            </td>
-            <td>
-                <select class="cell-select" onchange="editarOp(${op.id}, 'cliente', this.value)">
-                    <option value="">Selecione...</option>
-                    ${db.clientes.map(c => `<option value="${c.nome}" ${op.cliente===c.nome?'selected':''}>${c.nome}</option>`).join('')}
-                </select>
-            </td>
-            <td><input class="cell-input" style="text-align:right" value="${fmtDisplay(op.usdt)}" onchange="editarOp(${op.id}, 'usdt', this.value)"></td>
-            <td><input class="cell-input" style="text-align:right" value="${fmtCot(op.cot_venda)}" onchange="editarOp(${op.id}, 'cot_venda', this.value)"></td>
-            <td style="text-align:right; font-weight:700; color:${corLucro}">R$ ${fmtDisplay(op.lucro)}</td>
-            <td><button class="btn-small del" onclick="excluirOp(${op.id})">Excluir</button></td>
-        </tr>`;
-    }).join('');
-}
+                <label>Data:</label>
+                <input type="date" id="filtro-data-cli">
+            </div>
+        </div>
 
-async function adicionarLinhaVazia() {
-    const novaOp = {
-        data: new Date().toLocaleDateString('pt-BR'),
-        status: 'concluida',
-        cliente: '',
-        usdt: 0,
-        cot_compra: 0,
-        cot_venda: 0,
-        lucro: 0
-    };
+        <div class="table-card">
+            <div class="table-responsive" id="drag-clientes">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Hora</th><th>Cliente</th>
+                        <th>USDT</th><th>Cot. Venda</th><th>Total (R$)</th>
+                        <th>Lucro</th><th>Status</th>
+                    </tr></thead>
+                    <tbody id="tabela-clientes">
+                        <tr><td colspan="8" class="empty-state">Nenhuma venda registrada ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    const { error } = await _supabase.from('operacoes').insert([novaOp]);
-    if (error) return toast("Erro ao criar linha", "error");
-    
-    await sincronizarBanco();
-    renderTabelaOperacoes();
-}
+    </section>
 
-async function editarOp(id, campo, valor) {
-    let valFormatado = valor;
-    
-    // Se for campo numérico, limpa a formatação brasileira antes de salvar
-    if (campo === 'usdt' || campo === 'cot_venda' || campo === 'cot_compra') {
-        valFormatado = parseNum(valor);
-    }
+    <!-- ─── PÁGINA 3: DASHBOARD LUCRO ─────── -->
+    <section class="page-section" id="page-lucro">
 
-    // Busca a operação atual para recalcular lucro
-    const op = db.operacoes.find(o => o.id === id);
-    const dadosNovos = { [campo]: valFormatado };
+        <div class="section-header">
+            <div><h1>Dashboard de Lucro</h1><p>Resultado financeiro do período</p></div>
+            <div class="period-selector">
+                <button class="period-btn active" data-period="semana">Semanal</button>
+                <button class="period-btn" data-period="mes">Mensal</button>
+                <button class="period-btn" data-period="tudo">Tudo</button>
+            </div>
+        </div>
 
-    // Recalcula lucro se mudar valor ou cotação
-    if (campo === 'usdt' || campo === 'cot_venda') {
-        const u = campo === 'usdt' ? valFormatado : op.usdt;
-        const cv = campo === 'cot_venda' ? valFormatado : op.cot_venda;
-        const cc = op.cot_compra || 0; // Se você tiver cot_compra na tabela
-        dadosNovos.lucro = u * (cv - cc);
-    }
+        <!-- Cards KPI -->
+        <div class="lucro-cards">
+            <div class="lucro-card green">
+                <div class="lc-label">Lucro Bruto (Spread)</div>
+                <div class="lc-val" id="lc-lucro-total">R$ 0,00</div>
+                <div class="lc-sub">Diferença cot. compra vs venda</div>
+            </div>
+            <div class="lucro-card" style="border-color:rgba(255,85,85,.3);">
+                <div class="lc-label">Total de Despesas</div>
+                <div class="lc-val" style="color:#ff5555;" id="lc-despesas">R$ 0,00</div>
+                <div class="lc-sub">Registradas no período</div>
+            </div>
+            <div class="lucro-card" style="border-color:rgba(33,150,243,.3);">
+                <div class="lc-label">Lucro Líquido</div>
+                <div class="lc-val" style="color:#2196F3;" id="lc-lucro-liquido">R$ 0,00</div>
+                <div class="lc-sub">Spread menos despesas</div>
+            </div>
+            <div class="lucro-card blue">
+                <div class="lc-label">Volume Negociado</div>
+                <div class="lc-val" id="lc-volume">0,00 USDT</div>
+                <div class="lc-sub">Total operado no período</div>
+            </div>
+            <div class="lucro-card yellow">
+                <div class="lc-label">Spread Médio</div>
+                <div class="lc-val" id="lc-spread-medio">R$ 0,00</div>
+                <div class="lc-sub">Por USDT negociado</div>
+            </div>
+            <div class="lucro-card" style="border-color:rgba(224,224,224,.15);">
+                <div class="lc-label">Operações</div>
+                <div class="lc-val" id="lc-qtd-ops" style="color:#e0e0e0;">0</div>
+                <div class="lc-sub">No período selecionado</div>
+            </div>
+        </div>
 
-    const { error } = await _supabase.from('operacoes').update(dadosNovos).eq('id', id);
-    if (error) toast("Erro ao atualizar", "error");
-    else {
-        await sincronizarBanco();
-        renderTabelaOperacoes();
-    }
-}
+        <!-- Gráfico -->
+        <div class="chart-card">
+            <h3>Lucro por Dia (R$)</h3>
+            <div class="chart-wrap">
+                <canvas id="grafico-lucro"></canvas>
+            </div>
+        </div>
 
-async function excluirOp(id) {
-    if (!confirm("Excluir permanentemente?")) return;
-    await _supabase.from('operacoes').delete().eq('id', id);
-    await sincronizarBanco();
-    renderTabelaOperacoes();
-}
+        <!-- Despesas -->
+        <div class="section-header" style="margin-top:8px;">
+            <h2>Despesas</h2>
+        </div>
+        <div class="op-card">
+            <div class="form-grid" style="margin-bottom:0;">
+                <div class="input-group">
+                    <label>Descrição</label>
+                    <input type="text" id="desp-desc" placeholder="Ex: Aluguel, Energia, Funcionário...">
+                </div>
+                <div class="input-group">
+                    <label>Valor (R$)</label>
+                    <input type="text" id="desp-valor" placeholder="0,00">
+                </div>
+                <div class="input-group">
+                    <label>Data</label>
+                    <input type="date" id="desp-data">
+                </div>
+                <div class="input-group">
+                    <label>Categoria</label>
+                    <select id="desp-categoria">
+                        <option value="operacional">Operacional</option>
+                        <option value="pessoal">Pessoal</option>
+                        <option value="tecnologia">Tecnologia</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+            </div>
+            <div class="action-row" style="margin-top:16px;">
+                <button class="btn-primary" id="btn-add-despesa">+ Registrar Despesa</button>
+            </div>
+        </div>
 
-// ── 4. AUXILIARES ────────────────────────────────────────────
-function fmtDisplay(n) { return (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtCot(n) { return (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4}); }
-function parseNum(s) { return parseFloat(String(s).replace(/\./g,'').replace(',','.')) || 0; }
+        <div class="table-card" style="margin-top:8px;">
+            <div class="table-responsive">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Descrição</th><th>Categoria</th>
+                        <th style="text-align:right;">Valor (R$)</th><th>Ações</th>
+                    </tr></thead>
+                    <tbody id="tabela-despesas">
+                        <tr><td colspan="5" class="empty-state">Nenhuma despesa registrada.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-function toast(msg, tipo='success') {
-    const t = document.getElementById('toast');
-    if (t) {
-        t.textContent = msg;
-        t.className = 'show' + (tipo==='error'?' error':'');
-        setTimeout(() => t.className = '', 3000);
-    }
-}
+        <!-- Tabela operações -->
+        <div class="section-header" style="margin-top:24px;">
+            <h2>Detalhamento por Operação</h2>
+        </div>
+        <div class="table-card">
+            <div class="table-responsive">
+                <table>
+                    <thead><tr>
+                        <th>Data</th><th>Cliente</th><th>USDT</th>
+                        <th>Cot. Compra</th><th>Cot. Venda</th><th>Spread/USDT</th><th>Lucro (R$)</th>
+                    </tr></thead>
+                    <tbody id="tabela-lucro">
+                        <tr><td colspan="7" class="empty-state">Sem dados no período.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-// Vincular botão de nova linha (index.html)
-document.getElementById('btn-nova-linha-op')?.addEventListener('click', adicionarLinhaVazia);
+    </section>
 
-// ── 5. CLIENTES ──────────────────────────────────────────────
-async function acaoCadastrarCliente() {
-    const nome = document.getElementById('cad-nome').value.trim();
-    const contato = document.getElementById('cad-contato').value.trim();
-    if (!nome) return toast('Nome obrigatório', 'error');
+    <!-- ─── PÁGINA 4: COTAÇÕES AO VIVO ────── -->
+    <section class="page-section" id="page-cotacoes">
 
-    await _supabase.from('clientes').insert([{ nome, contato }]);
-    toast('Cliente salvo!');
-    await sincronizarBanco();
-    renderTabelaClientes();
-}
+        <div class="section-header">
+            <div><h1>Cotações ao Vivo</h1><p>USDT/BRL — Dólar Comercial em tempo real</p></div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="dot" style="width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 1.8s infinite;"></div>
+                    <span style="font-size:.82rem;color:#a0a0a0;" id="ultimo-update">Atualizando...</span>
+                </div>
+                <!-- Botão compartilhar tela do cliente -->
+                <button class="btn-secondary" id="btn-abrir-share" style="display:flex;align-items:center;gap:8px;padding:9px 18px;font-size:.82rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    Compartilhar com Cliente
+                </button>
+            </div>
+        </div>
+
+        <!-- Hero cotação -->
+        <div class="cotacao-hero">
+            <div class="ch-label">USDT / BRL — Preço de Mercado</div>
+            <div class="ch-price" id="cot-preco-principal">Carregando...</div>
+            <div class="ch-change" id="cot-variacao"></div>
+            <div class="ch-meta">
+                <span>Mínima 24h: <strong id="cot-min">—</strong></span>
+                <span>Máxima 24h: <strong id="cot-max">—</strong></span>
+                <span>Atualização: <strong>5s</strong></span>
+                <span>Fonte: <strong id="cot-fonte">—</strong></span>
+            </div>
+        </div>
+
+        <!-- Calculadora de Spread -->
+        <div class="spread-card">
+            <h3 style="margin:0 0 24px;font-size:.95rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+                Calculadora de Spread
+            </h3>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px;align-items:end;">
+
+                <div class="spread-item">
+                    <div class="si-label">Cotação de Mercado (R$)</div>
+                    <div class="si-val blue" id="calc-mercado" style="font-size:1.5rem;">—</div>
+                </div>
+
+                <div class="spread-item">
+                    <div class="si-label">Spread (%)</div>
+                    <input type="text" id="calc-spread-input" placeholder="Ex: 0,60"
+                        style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:12px 14px;border-radius:8px;font-size:1.1rem;font-weight:600;outline:none;width:100%;max-width:180px;box-sizing:border-box;transition:.2s;"
+                        oninput="calcularSpread()">
+                </div>
+
+                <!-- Preço final + botão copiar lado a lado -->
+                <div class="spread-item">
+                    <div class="si-label">Preço Final com Spread (R$)</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="font-size:1.5rem;font-weight:700;color:#fff;" id="calc-preco-final">—</div>
+                        <button onclick="copiarCotacao()" title="Copiar cotação"
+                            style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 10px;border-radius:8px;cursor:pointer;transition:.2s;flex-shrink:0;display:flex;align-items:center;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="spread-item">
+                    <div class="si-label">Spread por USDT (R$)</div>
+                    <div class="si-val" style="color:#ffc107;font-size:1.3rem;" id="calc-spread-rs">—</div>
+                </div>
+
+            </div>
+
+            <!-- Botão print -->
+            <div style="margin-top:24px;">
+                <button onclick="gerarPrintCotacao()"
+                    style="display:flex;align-items:center;gap:8px;background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.2s;letter-spacing:.03em;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Enviar Cotação via Print
+                </button>
+            </div>
+        </div>
+
+        <!-- Card de print invisível — só aparece para captura -->
+        <div id="cotacao-print-card" style="display:none;position:fixed;top:-9999px;left:-9999px;
+            width:480px;background:#0d0d0d;border:1px solid #2e2e2e;border-radius:16px;
+            padding:32px 36px;font-family:Inter,sans-serif;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+                <div>
+                    <div style="font-size:1.1rem;font-weight:700;letter-spacing:4px;color:#fff;">AXONE</div>
+                    <div style="font-size:.65rem;letter-spacing:3px;color:#555;margin-top:2px;">FX SUITE</div>
+                </div>
+                <div style="font-size:.75rem;color:#555;" id="print-hora"></div>
+            </div>
+            <div style="border-top:1px solid #1e1e1e;padding-top:20px;margin-bottom:20px;">
+                <div style="font-size:.7rem;letter-spacing:.12em;color:#555;text-transform:uppercase;margin-bottom:8px;">USDT / BRL — Cotação de Venda</div>
+                <div style="font-size:3rem;font-weight:700;color:#fff;letter-spacing:-1px;" id="print-preco">—</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#555;padding-top:16px;border-top:1px solid #1a1a1a;">
+                <span>Mercado: <span style="color:#a0a0a0;" id="print-mercado">—</span></span>
+                <span>Válido por 30 segundos</span>
+            </div>
+        </div>
+
+        <!-- Gráfico TradingView — USDT/BRL ao vivo com velas -->
+        <div class="chart-card" style="padding:0;overflow:hidden;border-radius:12px;min-height:460px;">
+            <div id="tv-chart-container" style="width:100%;height:460px;"></div>
+        </div>
+
+        <!-- Modal compartilhar -->
+        <div id="modal-share" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;">
+            <div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:36px;max-width:500px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-size:1.1rem;color:#fff;">Compartilhar Tela de Câmbio</h3>
+                    <button onclick="fecharModal()" style="background:none;border:none;color:#666;font-size:1.2rem;cursor:pointer;padding:4px 8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <p style="color:#a0a0a0;font-size:.88rem;margin-bottom:20px;line-height:1.6;">
+                    Envie este link para o cliente acompanhar a cotação ao vivo. Ele poderá ver o preço em tempo real, tirar print e enviar para travar o valor desejado.
+                </p>
+                <div style="background:#111;border:1px solid #2e2e2e;border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:20px;">
+                    <span id="link-cliente-url" style="font-size:.82rem;color:#a0a0a0;word-break:break-all;flex:1;">cotacao-cliente.html</span>
+                    <button onclick="copiarLink()" style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;font-size:.8rem;font-weight:600;transition:.2s;">
+                        Copiar Link
+                    </button>
+                </div>
+                <button onclick="abrirPaginaCliente()" class="btn-primary" style="width:100%;padding:13px;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Abrir Prévia da Tela do Cliente
+                </button>
+            </div>
+        </div>
+
+    </section>
+
+
+    <!-- ═══════════════ OPERAÇÕES ═══════════════ -->
+    <section class="page-section" id="page-operacoes">
+        <div class="section-header">
+            <div>
+                <h1>Operações</h1>
+            </div>
+            <div class="header-actions" style="display:flex;gap:10px;">
+                <button class="btn-secondary" id="btn-exportar-op" style="font-size:.82rem;padding:8px 16px;">Exportar PDF</button>
+            </div>
+        </div>
+
+        <!-- Glossário de Status — elegante e discreto -->
+        <div class="status-glossary" id="status-glossary">
+            <button class="sg-toggle" onclick="toggleGlossary()" title="Ver legenda de status">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Status Legend
+            </button>
+            <div class="sg-panel" id="sg-panel" style="display:none;">
+                <div class="sg-title">Transaction Status</div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#4CAF50;"></span>
+                    <div>
+                        <span class="sg-term">Settled</span>
+                        <span class="sg-pt">Concluída</span>
+                        <span class="sg-desc">Operação totalmente liquidada — dinheiro e ativo entregues.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#2196F3;"></span>
+                    <div>
+                        <span class="sg-term">Processing</span>
+                        <span class="sg-pt">Em Andamento</span>
+                        <span class="sg-desc">Operação em fila de execução ou aguardando rede.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ffc107;"></span>
+                    <div>
+                        <span class="sg-term">Payment Pending</span>
+                        <span class="sg-pt">Falta Pagar</span>
+                        <span class="sg-desc">Fluxo financeiro do cliente ainda não identificado.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ff9800;"></span>
+                    <div>
+                        <span class="sg-term">Asset Pending</span>
+                        <span class="sg-pt">Nós Devemos</span>
+                        <span class="sg-desc">Pagamento recebido — USDT ainda não liberado.</span>
+                    </div>
+                </div>
+                <div class="sg-row">
+                    <span class="sg-dot" style="background:#ff5555;"></span>
+                    <div>
+                        <span class="sg-term">Voided</span>
+                        <span class="sg-pt">Cancelada</span>
+                        <span class="sg-desc">Transação anulada ou invalidada.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cards resumo -->
+        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+            <div class="card" style="border-color:rgba(33,150,243,.3);">
+                <h3>Saldo Disponível</h3>
+                <div class="value" style="color:#2196F3;" id="op-card-saldo">0,00 USDT</div>
+                <div class="subtitle">USDT em estoque para vender</div>
+            </div>
+            <div class="card highlight">
+                <h3>Lucro Total</h3>
+                <div class="value" id="op-card-lucro">R$ 0,00</div>
+                <div class="subtitle">Spread acumulado</div>
+            </div>
+            <div class="card">
+                <h3>Volume USDT</h3>
+                <div class="value" id="op-card-volume">0,00 USDT</div>
+                <div class="subtitle">Total negociado</div>
+            </div>
+            <div class="card">
+                <h3>Spread Médio</h3>
+                <div class="value" id="op-card-spread">R$ 0,0000</div>
+                <div class="subtitle">Por USDT negociado</div>
+            </div>
+        </div>
+
+        <!-- Tabela estilo Excel -->
+        <div class="table-card" style="margin-top:24px;">
+            <div class="table-responsive" id="drag-operacoes">
+                <table id="tabela-op-excel">
+                    <thead>
+                        <tr>
+                            <th style="width:110px;text-align:left;">Data</th>
+                            <th style="width:150px;text-align:left;">Status</th>
+                            <th style="width:150px;text-align:left;">Cliente</th>
+                            <th style="width:130px;text-align:right;padding-right:14px;">Valor USDT</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Compra</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Venda</th>
+                            <th style="width:140px;text-align:right;padding-right:14px;">Total Compra</th>
+                            <th style="width:130px;text-align:right;padding-right:14px;">Total Venda</th>
+                            <th style="width:120px;text-align:right;padding-right:14px;">Lucro</th>
+                            <th style="width:70px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-operacoes">
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="10" style="padding:10px 12px;">
+                                <button class="btn-secondary" id="btn-nova-linha-op" style="font-size:.82rem;padding:7px 18px;display:flex;align-items:center;gap:6px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Nova Linha
+                                </button>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </section>
+
+
+</div><!-- /main-content -->
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
