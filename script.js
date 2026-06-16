@@ -1,786 +1,1646 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+// ============================================================
+// AXONE — FX MANAGEMENT SUITE  |  script.js v2.0
+// ============================================================
+
+// ── 0. AUTH ─────────────────────────────────────────────────
+(function() {
+    if (sessionStorage.getItem('kroma_autenticado') !== 'true') {
+        window.location.href = 'login.html';
+    }
+    const u = sessionStorage.getItem('kroma_usuario') || 'admin';
+    const nome = u.charAt(0).toUpperCase() + u.slice(1);
+    ['nome-usuario','nome-usuario-mobile'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = nome;
+    });
+})();
+
+function logout() {
+    sessionStorage.clear();
+    window.location.href = 'login.html';
+}
+
+// ── 0.0 HOME LINKS (dentro das tabelas do home) ──────────────
+document.addEventListener('click', e => {
+    const a = e.target.closest('.home-link');
+    if (!a) return;
+    e.preventDefault();
+    const page = a.dataset.page;
+    if (!page) return;
+    document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('page-' + page)?.classList.add('active');
+    if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); }
+});
+
+// ── 0.1 DATA DINÂMICA ────────────────────────────────────────
+(function() {
+    const el = document.getElementById('data-atual');
+    if (el) el.textContent = new Date().toLocaleDateString('pt-BR', {
+        weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+})();
+
+// ── 1. FORMATAÇÃO ────────────────────────────────────────────
+function fmtMoeda(v) {
+    v = v.replace(/\D/g,'');
+    v = (v/100).toFixed(2)+'';
+    v = v.replace('.',',');
+    v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
+    return v;
+}
+function fmtDisplay(n) {
+    return (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtCot(n) {
+    return (+n||0).toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4});
+}
+function parseNum(s) {
+    return parseFloat((s||'').replace(/\./g,'').replace(',','.')) || 0;
+}
+
+// ── 1.1 TOAST ────────────────────────────────────────────────
+function toast(msg, tipo='success') {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'show' + (tipo==='error'?' error':'');
+    clearTimeout(t._tid);
+    t._tid = setTimeout(()=>{ t.className=''; }, 3200);
+}
+
+// ── 2. NAVEGAÇÃO ─────────────────────────────────────────────
+const pages = { fornecedor:null, clientes:null, lucro:null, cotacoes:null };
+
+document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(a => {
+    a.addEventListener('click', e => {
+        e.preventDefault();
+        const page = a.dataset.page;
+        navegarPara(page);
+    });
+});
+
+// ── Navegação centralizada ───────────────────────────────────
+function navegarPara(page) {
+    sessionStorage.setItem('kroma_pagina', page);
+    document.querySelectorAll('.nav-links a, .nav-drawer a').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    const sec = document.getElementById('page-' + page);
+    if (sec) sec.classList.add('active');
+    if (page === 'home')       renderHome();
+    if (page === 'lucro')      renderLucro();
+    if (page === 'cotacoes')   iniciarCotacoes();
+    if (page === 'operacoes') { if(window._initOperacoes) window._initOperacoes(); else if(window._renderOperacoes) window._renderOperacoes(); }
+    // Fecha drawer mobile se estiver aberto
+    const drawer = document.getElementById('nav-drawer');
+    const btn    = document.getElementById('nav-hamburger');
+    if (drawer) drawer.classList.remove('open');
+    if (btn)    btn.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+// ── Restaura última aba ao dar F5 ────────────────────────────
+(function() {
+    const paginaSalva = sessionStorage.getItem('kroma_pagina') || 'home';
+    navegarPara(paginaSalva);
+})();
+
+// ── HAMBURGUER MENU (MOBILE) ─────────────────────────────────
+(function() {
+    const btn    = document.getElementById('nav-hamburger');
+    const drawer = document.getElementById('nav-drawer');
+    if (!btn || !drawer) return;
+
+    btn.addEventListener('click', () => {
+        const open = drawer.classList.toggle('open');
+        btn.classList.toggle('open', open);
+        document.body.style.overflow = open ? 'hidden' : '';
+    });
+
+    // Fecha ao clicar num link do drawer
+    drawer.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', () => {
+            drawer.classList.remove('open');
+            btn.classList.remove('open');
+            document.body.style.overflow = '';
+        });
+    });
+})();
+
+// ── 3. BANCO DE DADOS (localStorage) ────────────────────────
+let opFornecedor = JSON.parse(localStorage.getItem('banco_cambio'))      || [];
+let opClientes   = JSON.parse(localStorage.getItem('banco_clientes'))    || [];
+let cadastrosCli = JSON.parse(localStorage.getItem('banco_cadastros'))   || [];
+let opOperacoes    = JSON.parse(localStorage.getItem('banco_operacoes'))     || [];
+let cadFornecedores = JSON.parse(localStorage.getItem('banco_fornecedores')) || [];
+
+function salvarFornecedor()    { localStorage.setItem('banco_cambio',       JSON.stringify(opFornecedor)); }
+function salvarClientes()      { localStorage.setItem('banco_clientes',     JSON.stringify(opClientes)); }
+function salvarCadastros()     { localStorage.setItem('banco_cadastros',    JSON.stringify(cadastrosCli)); }
+function salvarOperacoes()     { localStorage.setItem('banco_operacoes',    JSON.stringify(opOperacoes)); }
+function salvarFornecedores()  { localStorage.setItem('banco_fornecedores', JSON.stringify(cadFornecedores)); }
+
+// ── Saldo disponível ─────────────────────────────────────────
+// Total comprado no fornecedor menos total vendido nas operações
+function saldoTotalDisponivel() {
+    const totalComprado = opFornecedor.reduce((s, o) => s + (o.usdt || 0), 0);
+    const totalVendido  = opOperacoes.reduce((s, o) => s + (o.usdt  || 0), 0);
+    return Math.max(0, totalComprado - totalVendido);
+}
+
+// Saldo por compra individual — para exibir na coluna da tabela fornecedor
+function saldoPorCompra(opRef) {
+    const compra    = opFornecedor.find(o => o.ref === opRef);
+    if (!compra) return 0;
+    // Desconta operações que referenciam essa compra pela cotação
+    const vendido = opOperacoes
+        .filter(v => v.cotCompra && Math.round(v.cotCompra * 10000) === Math.round(compra.cotacao * 10000))
+        .reduce((s, v) => s + (v.usdt || 0), 0);
+    return Math.max(0, compra.usdt - vendido);
+}
+
+// ============================================================
+// MÓDULO E — OPERAÇÕES (tabela estilo Excel)
+// ============================================================
+// Estrutura de cada linha:
+// { ref, data, status, cliente, usdt, cotCompra, cotVenda, totalCompra, totalVenda, lucro }
+
+let _opInitDone = false;
+
+function initOperacoes() {
+    if (_opInitDone) return;
+    _opInitDone = true;
+
+    const btnNova  = document.getElementById('btn-nova-linha-op');
+    const btnPDF   = document.getElementById('btn-exportar-op');
+    if (btnNova) btnNova.addEventListener('click', () => { adicionarLinhaOp(); });
+    if (btnPDF)  btnPDF.addEventListener('click', exportarOpPDF);
+
+    renderTabelaOp();
+    atualizarCardsOp();
+    dragScroll(document.getElementById('drag-operacoes'));
+}
+
+// Typing effect removido
+
+// ── Toggle glossário de status ───────────────────────────────
+function toggleGlossary() {
+    const panel = document.getElementById('sg-panel');
+    if (!panel) return;
+    const open = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+
+    // Fecha ao clicar fora
+    if (open) {
+        setTimeout(() => {
+            document.addEventListener('click', function handler(e) {
+                if (!document.getElementById('status-glossary')?.contains(e.target)) {
+                    panel.style.display = 'none';
+                    document.removeEventListener('click', handler);
+                }
+            });
+        }, 0);
+    }
+}
+
+// ── Adiciona linha nova ou com dados ──────────────────────────
+function adicionarLinhaOp(dados) {
+    const agora = new Date();
+    const linha = dados || {
+        ref:        Date.now(),
+        data:       agora.toLocaleDateString('pt-BR'),
+        status:     'concluida',
+        cliente:    '',
+        usdt:       0,
+        cotCompra:  0,
+        cotVenda:   0,
+        totalCompra:0,
+        totalVenda: 0,
+        lucro:      0,
+    };
+    if (!dados) opOperacoes.unshift(linha);
+    salvarOperacoes();
+    renderTabelaOp();
+    atualizarCardsOp();
+    // Foca na célula USDT da primeira linha
+    setTimeout(() => {
+        const firstInput = document.querySelector('#tabela-operacoes tr:first-child .op-usdt');
+        if (firstInput) firstInput.focus();
+    }, 50);
+}
+
+// ── Renderiza toda a tabela ───────────────────────────────────
+function renderTabelaOp() {
+    const tb = document.getElementById('tabela-operacoes');
+    if (!tb) return;
+
+    // Guarda foco atual para restaurar depois
+    const focusRef  = document.activeElement?.dataset?.ref;
+    const focusField = document.activeElement?.dataset?.field;
+
+    tb.innerHTML = '';
+
+    const statusOpts = [
+        { v:'concluida',   l:'Settled',         cor:'#4CAF50' },
+        { v:'andamento',   l:'Processing',      cor:'#2196F3' },
+        { v:'falta_pagar', l:'Payment Pending', cor:'#ffc107' },
+        { v:'nos_devemos', l:'Asset Pending',   cor:'#ff9800' },
+        { v:'cancelada',   l:'Voided',          cor:'#ff5555' },
+    ];
+
+    const clientes = cadastrosCli.map(c => c.nome);
+
+    opOperacoes.forEach(op => {
+        const corLucro  = (op.lucro||0) > 0 ? '#4CAF50' : (op.lucro||0) < 0 ? '#ff5555' : '#888';
+        const stOpt     = statusOpts.find(s => s.v === op.status) || statusOpts[0];
+        const tr = document.createElement('tr');
+        tr.dataset.ref = op.ref;
+
+        // Monta opções de clientes
+        const cliOpts = clientes.map(n =>
+            `<option value="${n}" ${op.cliente===n?'selected':''}>${n}</option>`
+        ).join('');
+
+        tr.innerHTML = `
+            <td>
+                <input class="cell-input op-data" data-ref="${op.ref}" data-field="data"
+                    value="${op.data}" style="width:100px;min-width:100px;">
+            </td>
+            <td>
+                <select class="cell-select op-status" data-ref="${op.ref}" data-field="status"
+                    style="color:${stOpt.cor};font-weight:700;">
+                    ${statusOpts.map(s=>`<option value="${s.v}" ${op.status===s.v?'selected':''} style="color:${s.cor};font-weight:700;">${s.l}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select class="cell-select op-cliente" data-ref="${op.ref}" data-field="cliente">
+                    <option value="">— cliente —</option>
+                    ${cliOpts}
+                </select>
+            </td>
+            <td class="td-num">
+                <input class="cell-input op-usdt" data-ref="${op.ref}" data-field="usdt"
+                    value="${op.usdt ? fmtDisplay(op.usdt) : ''}" placeholder="0,00"
+                    inputmode="numeric">
+            </td>
+            <td class="td-num">
+                <input class="cell-input op-cot-compra" data-ref="${op.ref}" data-field="cotCompra"
+                    value="${op.cotCompra ? fmtCot(op.cotCompra) : ''}" placeholder="0,0000">
+            </td>
+            <td class="td-num">
+                <input class="cell-input op-cot-venda" data-ref="${op.ref}" data-field="cotVenda"
+                    value="${op.cotVenda ? fmtCot(op.cotVenda) : ''}" placeholder="0,0000">
+            </td>
+            <td class="td-num td-calc" style="padding-right:14px;">
+                ${op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—'}
+            </td>
+            <td class="td-num td-calc" style="padding-right:14px;">
+                ${op.totalVenda ? 'R$ '+fmtDisplay(op.totalVenda) : '—'}
+            </td>
+            <td class="td-num td-calc" style="padding-right:14px;font-weight:700;color:${corLucro};">
+                ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
+            </td>
+            <td style="padding:0 8px;">
+                <div style="display:flex;gap:4px;align-items:center;">
+                    ${op.cotVenda && op.cliente ? `
+                    <button class="btn-small" title="Copiar trava" onclick="copiarTrava(${op.ref})"
+                        style="background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:4px 6px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>` : ''}
+                    <button class="btn-small del" title="Excluir linha" onclick="excluirOperacao(${op.ref})"
+                        style="padding:4px 6px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    </button>
+                </div>
+            </td>`;
+
+        // Eventos de edição inline
+        tr.querySelectorAll('.cell-input').forEach(inp => {
+            // Máscara USDT: formata ao sair do campo
+            if (inp.classList.contains('op-usdt')) {
+                inp.addEventListener('input', e => {
+                    // Remove tudo que não é número enquanto digita
+                    const raw = e.target.value.replace(/\D/g,'');
+                    e.target.value = raw;
+                });
+                inp.addEventListener('blur', e => {
+                    const raw = e.target.value.replace(/\D/g,'').replace(/^0+/,'') || '0';
+                    const num = parseFloat(raw) || 0;
+                    if (num > 0) e.target.value = fmtDisplay(num);
+                    salvarCelulaOp(e.target);
+                });
+                inp.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') e.target.blur();
+                });
+            } else {
+                inp.addEventListener('change', e => salvarCelulaOp(e.target));
+                inp.addEventListener('keydown', e => { if (e.key==='Enter') e.target.blur(); });
+            }
+        });
+        tr.querySelectorAll('.cell-select').forEach(sel => {
+            sel.addEventListener('change', e => {
+                // Atualiza cor do status imediatamente ao mudar
+                if (e.target.classList.contains('op-status')) {
+                    const cores = {
+                        concluida:'#4CAF50', andamento:'#2196F3',
+                        falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555'
+                    };
+                    e.target.style.color = cores[e.target.value] || '#e0e0e0';
+                }
+                salvarCelulaOp(e.target);
+            });
+        });
+
+        tb.appendChild(tr);
+    });
+
+    // Restaura foco
+    if (focusRef && focusField) {
+        const el = tb.querySelector(`[data-ref="${focusRef}"][data-field="${focusField}"]`);
+        if (el) el.focus();
+    }
+
+    atualizarCardsOp();
+}
+
+// ── Salva alteração de uma célula e recalcula lucro ───────────
+function salvarCelulaOp(el) {
+    const ref   = parseInt(el.dataset.ref);
+    const field = el.dataset.field;
+    const idx   = opOperacoes.findIndex(o => o.ref === ref);
+    if (idx === -1) return;
+
+    const op = opOperacoes[idx];
+
+    if (field === 'usdt') {
+        // Valor pode vir como "100.000,00" ou "100000"
+        op[field] = parseNum(el.value) || parseFloat(el.value.replace(/\./g,'').replace(',','.')) || 0;
+    } else if (field === 'cotCompra' || field === 'cotVenda') {
+        op[field] = parseNum(el.value);
+    } else {
+        op[field] = el.value;
+    }
+
+    // Recalcula totais e lucro
+    if (op.usdt && op.cotCompra) op.totalCompra = op.usdt * op.cotCompra;
+    else op.totalCompra = 0;
+
+    if (op.usdt && op.cotVenda)  op.totalVenda = op.usdt * op.cotVenda;
+    else op.totalVenda = 0;
+
+    if (op.totalCompra && op.totalVenda) op.lucro = op.totalVenda - op.totalCompra;
+    else op.lucro = 0;
+
+    opOperacoes[idx] = op;
+    salvarOperacoes();
+
+    // Atualiza só as células calculadas da linha sem re-renderizar tudo
+    const tr = document.querySelector(`#tabela-operacoes tr[data-ref="${ref}"]`);
+    if (tr) {
+        const cells = tr.querySelectorAll('td');
+        const corLucro = op.lucro > 0 ? '#4CAF50' : op.lucro < 0 ? '#ff5555' : '#888';
+        cells[6].textContent = op.totalCompra ? 'R$ '+fmtDisplay(op.totalCompra) : '—';
+        cells[7].textContent = op.totalVenda  ? 'R$ '+fmtDisplay(op.totalVenda)  : '—';
+        cells[8].style.color      = corLucro;
+        cells[8].style.fontWeight = '700';
+        cells[8].textContent = op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—';
+        // Atualiza botão trava
+        const btnDiv = cells[9].querySelector('div');
+        if (btnDiv) {
+            const jaTemTrava = btnDiv.querySelector('button[title="Copiar trava"]');
+            if (op.cotVenda && op.cliente && !jaTemTrava) {
+                const btn = document.createElement('button');
+                btn.className = 'btn-small';
+                btn.title = 'Copiar trava';
+                btn.style.cssText = 'background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:4px 6px;';
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+                btn.onclick = () => copiarTrava(op.ref);
+                btnDiv.insertBefore(btn, btnDiv.firstChild);
+            }
+        }
+        // Atualiza cor do status select
+        const selStatus = tr.querySelector('.op-status');
+        if (selStatus && field === 'status') {
+            const stOpts = {
+                concluida:'#4CAF50', andamento:'#2196F3',
+                falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555'
+            };
+            selStatus.style.color = stOpts[op.status] || '#e0e0e0';
+        }
+    }
+
+    atualizarCardsOp();
+    carregarFornecedor(); // atualiza saldo disponível
+}
+
+// ── Cards de resumo ───────────────────────────────────────────
+function atualizarCardsOp() {
+    const comVenda    = opOperacoes.filter(o => o.cotVenda && o.usdt);
+    const totalLucro  = comVenda.reduce((s,o) => s+(o.lucro||0), 0);
+    const totalVol    = opOperacoes.reduce((s,o) => s+(o.usdt||0), 0);
+    const volVendido  = comVenda.reduce((s,o) => s+(o.usdt||0), 0);
+    const spreadMedio = volVendido > 0 ? totalLucro/volVendido : 0;
+    const saldoDisp   = saldoTotalDisponivel();
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('op-card-saldo',   fmtDisplay(saldoDisp)+' USDT');
+    set('op-card-lucro',   'R$ '+fmtDisplay(totalLucro));
+    set('op-card-volume',  fmtDisplay(totalVol)+' USDT');
+    set('op-card-spread',  'R$ '+fmtCot(spreadMedio));
+
+    const elForn = document.getElementById('card-saldo-disponivel');
+    if (elForn) elForn.textContent = fmtDisplay(saldoDisp)+' USDT';
+}
+
+// ── Excluir linha ─────────────────────────────────────────────
+function excluirOperacao(ref) {
+    if (!confirm('Excluir esta linha?')) return;
+    opOperacoes = opOperacoes.filter(o => o.ref !== ref);
+    salvarOperacoes();
+    renderTabelaOp();
+    carregarFornecedor();
+    toast('Linha excluída.');
+}
+
+// ── Copiar trava para cliente ─────────────────────────────────
+function copiarTrava(ref) {
+    const op = opOperacoes.find(o => o.ref === ref);
+    if (!op || !op.cliente || !op.cotVenda) return;
+    const nome  = op.cliente.toUpperCase().padEnd(12,' ');
+    const usdt  = 'US$ '+fmtDisplay(op.usdt);
+    const cot   = 'R$ '+fmtCot(op.cotVenda);
+    const total = 'R$ '+fmtDisplay(op.totalVenda);
+    const trava = `${nome}   ${usdt}   ${cot}   ${total}`;
+    navigator.clipboard.writeText(trava).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value=trava; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+    toast('Trava copiada! ✓');
+}
+
+// ── Exportar PDF ──────────────────────────────────────────────
+function exportarOpPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l','mm','a4');
+    const pw  = doc.internal.pageSize.getWidth();
+
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('AXONE — Operações', pw/2, 20, {align:'center'});
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw/2, 28, {align:'center'});
+    const totalLucro = opOperacoes.reduce((s,o)=>s+(o.lucro||0),0);
+    doc.text(`Lucro Total: R$ ${fmtDisplay(totalLucro)}`, pw/2, 34, {align:'center'});
+
+    doc.autoTable({
+        startY: 40,
+        head: [['Data','Status','Cliente','USDT','Cot. Compra','Cot. Venda','Total Compra','Total Venda','Lucro']],
+        body: opOperacoes.map(o => [
+            o.data, o.status, o.cliente||'—',
+            fmtDisplay(o.usdt),
+            o.cotCompra ? 'R$ '+fmtCot(o.cotCompra) : '—',
+            o.cotVenda  ? 'R$ '+fmtCot(o.cotVenda)  : '—',
+            o.totalCompra ? 'R$ '+fmtDisplay(o.totalCompra) : '—',
+            o.totalVenda  ? 'R$ '+fmtDisplay(o.totalVenda)  : '—',
+            o.lucro       ? 'R$ '+fmtDisplay(o.lucro)       : '—',
+        ]),
+        styles: { fontSize:8, cellPadding:3 },
+        headStyles: { fillColor:[30,30,30], textColor:[200,200,200] },
+        alternateRowStyles: { fillColor:[245,245,245] },
+    });
+    doc.save('axone-operacoes.pdf');
+}
+
+// Expõe para navegação
+window._renderOperacoes = renderTabelaOp;
+window._initOperacoes   = initOperacoes;
+
+
+// ============================================================
+// MÓDULO HOME
+// ============================================================
+let homeChartLucro  = null;
+let homeChartVolume = null;
+let homeClockTick   = null;
+
+function renderHome() {
+    // ── Saudação + data + relógio ─────────────────────────────
+    const hora  = new Date().getHours();
+    const greet = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+    const usuario = sessionStorage.getItem('kroma_usuario') || 'admin';
+    const nome    = usuario.charAt(0).toUpperCase() + usuario.slice(1);
+    const elG = document.getElementById('home-greeting');
+    if (elG) elG.textContent = `${greet}, ${nome}`;
+
+    const elD = document.getElementById('home-date');
+    if (elD) elD.textContent = new Date().toLocaleDateString('pt-BR',
+        { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+    // Relógio discreto — mesmo tamanho da data
+    if (!homeClockTick) {
+        homeClockTick = setInterval(() => {
+            const elT = document.getElementById('home-time');
+            if (elT) elT.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }, 1000);
+    }
+    const elT = document.getElementById('home-time');
+    if (elT) elT.textContent = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+    // ── Tagline com fade suave entre frases ───────────────────
+    if (!window._taglineInit) {
+        window._taglineInit = true;
+        const frases = [
+            'Inteligência de mercado ao seu alcance.',
+            'Controle total das suas operações.',
+            'Spread calculado automaticamente.',
+            'Decisões mais inteligentes.',
+            'A plataforma dos grandes operadores.',
+            'Saldos sempre atualizados.',
+            'Conciliação ágil e precisa.',
+            'Sua operação em alto nível.',
+            'O futuro do OTC é aqui.',
+            'Segurança em cada transação.',
+            'Excelência em cada detalhe.',
+        ];
+        let fi = 0;
+        const elTag = document.getElementById('home-tagline');
+        if (elTag) {
+            setInterval(() => {
+                elTag.classList.remove('fade-in');
+                elTag.classList.add('fade-out');
+                setTimeout(() => {
+                    fi = (fi + 1) % frases.length;
+                    elTag.textContent = frases[fi];
+                    elTag.classList.remove('fade-out');
+                    elTag.classList.add('fade-in');
+                }, 650);
+            }, 4000);
+        }
+    }
+
+    // ── KPIs ─────────────────────────────────────────────────
+    const mesAtual  = new Date().toLocaleDateString('pt-BR').slice(3);
+    const opsMes    = opOperacoes.filter(o => o.data && o.data.slice(3) === mesAtual);
+    const lucroMes  = opsMes.reduce((s,o) => s+(o.lucro||0), 0);
+    const volumeMes = opsMes.reduce((s,o) => s+(o.usdt||0), 0);
+    const saldoDisp = saldoTotalDisponivel();
+    const opsAbert  = opOperacoes.filter(o => o.status==='andamento' || o.status==='falta_pagar').length;
+    const assetPend = opOperacoes.filter(o => o.status==='nos_devemos').reduce((s,o)=>s+(o.usdt||0),0);
+    const aPagarF   = Math.max(0, opFornecedor.reduce((s,o)=>s+(o.totalBrl||0),0) - opFornecedor.reduce((s,o)=>s+(o.pix||0),0));
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('home-saldo',         fmtDisplay(saldoDisp)+' USDT');
+    set('home-lucro-mes',     'R$ '+fmtDisplay(lucroMes));
+    set('home-volume-mes',    fmtDisplay(volumeMes)+' USDT');
+    set('home-ops-abertas',   opsAbert);
+    set('home-asset-pending', fmtDisplay(assetPend)+' USDT');
+    set('home-a-pagar',       'R$ '+fmtDisplay(aPagarF));
+
+    // Lucro do mês: cor dinâmica
+    const elLM = document.getElementById('home-lucro-mes');
+    if (elLM) elLM.style.color = lucroMes >= 0 ? '#4CAF50' : '#ff5555';
+
+    // ── Gráfico: Lucro 30 dias ────────────────────────────────
+    const hoje30   = new Date();
+    const ini30    = new Date(); ini30.setDate(ini30.getDate() - 29);
+    const diasMap  = {};
+    const volMap   = {};
+
+    // Gera todos os 30 dias
+    for (let i = 0; i < 30; i++) {
+        const d = new Date(ini30); d.setDate(ini30.getDate() + i);
+        const label = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+        diasMap[label] = 0;
+        volMap[label]  = 0;
+    }
+
+    opOperacoes.forEach(op => {
+        if (!op.data || !op.lucro) return;
+        const [dd,mm,aa] = op.data.split('/');
+        const dt = new Date(+aa,+mm-1,+dd);
+        if (dt >= ini30 && dt <= hoje30) {
+            const label = dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+            diasMap[label] = (diasMap[label]||0) + (op.lucro||0);
+            volMap[label]  = (volMap[label]||0)  + (op.usdt||0);
+        }
+    });
+
+    const labels  = Object.keys(diasMap);
+    const lucros  = Object.values(diasMap).map(v => +v.toFixed(2));
+    const volumes = Object.values(volMap).map(v => +v.toFixed(2));
+
+    // Chart Lucro
+    if (homeChartLucro) homeChartLucro.destroy();
+    const ctxL = document.getElementById('home-chart-lucro')?.getContext('2d');
+    if (ctxL) {
+        homeChartLucro = new Chart(ctxL, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    data: lucros,
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76,175,80,.08)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.4,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false, animation:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',maxTicksLimit:8,font:{size:10}} },
+                    y:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',font:{size:10},callback:v=>'R$'+fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // Chart Volume
+    if (homeChartVolume) homeChartVolume.destroy();
+    const ctxV = document.getElementById('home-chart-volume')?.getContext('2d');
+    if (ctxV) {
+        homeChartVolume = new Chart(ctxV, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    data: volumes,
+                    backgroundColor: 'rgba(33,150,243,.25)',
+                    borderColor: 'rgba(33,150,243,.7)',
+                    borderWidth: 1,
+                    borderRadius: 3,
+                }]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false, animation:false,
+                plugins:{ legend:{display:false} },
+                scales:{
+                    x:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',maxTicksLimit:8,font:{size:10}} },
+                    y:{ grid:{color:'rgba(255,255,255,.03)'}, ticks:{color:'#555',font:{size:10},callback:v=>fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // ── Tabela últimas operações ──────────────────────────────
+    const statusCores = { concluida:'#4CAF50',andamento:'#2196F3',falta_pagar:'#ffc107',nos_devemos:'#ff9800',cancelada:'#ff5555' };
+    const statusNomes = { concluida:'Settled',andamento:'Processing',falta_pagar:'Payment Pending',nos_devemos:'Asset Pending',cancelada:'Voided' };
+
+    const tbOps = document.getElementById('home-tabela-ops');
+    if (tbOps) {
+        const ultOps = opOperacoes.filter(o=>o.cliente).slice(0,6);
+        tbOps.innerHTML = ultOps.length ? ultOps.map(o=>`
+            <tr>
+                <td style="padding:6px 8px;font-size:.78rem;">${o.data}</td>
+                <td style="padding:6px 8px;font-size:.78rem;font-weight:600;">${o.cliente}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:${(o.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
+                    ${o.lucro?'R$ '+fmtDisplay(o.lucro):'—'}
+                </td>
+                <td style="padding:6px 8px;">
+                    <span style="font-size:.68rem;font-weight:700;color:${statusCores[o.status]||'#888'};">
+                        ${statusNomes[o.status]||o.status}
+                    </span>
+                </td>
+            </tr>`).join('')
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:#555;font-size:.82rem;">Nenhuma operação ainda.</td></tr>';
+    }
+
+    // ── Tabela últimas compras ────────────────────────────────
+    const tbComp = document.getElementById('home-tabela-compras');
+    if (tbComp) {
+        const ultComp = opFornecedor.slice(0,6);
+        tbComp.innerHTML = ultComp.length ? ultComp.map(o => {
+            const saldo   = saldoPorCompra(o.ref);
+            const corSaldo= saldo<=0?'#4CAF50':saldo<o.usdt?'#ffc107':'#a0a0a0';
+            return `
+            <tr>
+                <td style="padding:6px 8px;font-size:.78rem;">${o.data}</td>
+                <td style="padding:6px 8px;font-size:.78rem;">${o.fornecedor||'—'}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:#4CAF50;font-weight:700;">${fmtDisplay(o.usdt)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;">R$ ${fmtCot(o.cotacao)}</td>
+                <td style="padding:6px 8px;font-size:.78rem;text-align:right;color:${corSaldo};font-weight:700;">${fmtDisplay(saldo)}</td>
+            </tr>`;
+        }).join('')
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:#555;font-size:.82rem;">Nenhuma compra ainda.</td></tr>';
+    }
+}
+
+
+// ============================================================
+// MÓDULO A — FORNECEDOR
+// ============================================================
+(function() {
+    const iValComp = document.getElementById('valor-comprado');
+    const iCot     = document.getElementById('cotacao');
+    const iTotAuto = document.getElementById('total-automatico');
+    const iValPix  = document.getElementById('valor-pix');
+    const iRefPix  = document.getElementById('referencia-pix');
+    const iSelForn = document.getElementById('select-fornecedor');
+    const btnReg   = document.getElementById('btn-registrar');
+    const btnCan   = document.getElementById('btn-cancelar');
+    const iFiltroD = document.getElementById('filtro-data');
+    const btnLimp  = document.getElementById('btn-limpar-filtro');
+
+    if (!btnReg) return;
+
+    function calcTotalForn() {
+        const total = parseNum(iValComp.value) * parseNum(iCot.value);
+        iTotAuto.value = total > 0 ? fmtDisplay(total) : '';
+    }
+
+    iValComp.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); calcTotalForn(); });
+    iCot.addEventListener('input', calcTotalForn);
+    iValPix.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); });
+
+    function limparForn() {
+        iValComp.value=''; iCot.value=''; iTotAuto.value=''; iValPix.value='';
+        if (iRefPix) iRefPix.value='';
+        iValComp.focus();
+    }
+    btnCan.addEventListener('click', limparForn);
+    document.addEventListener('keydown', e => { if (e.key==='Escape') limparForn(); });
+
+    btnReg.addEventListener('click', () => {
+        const usdt  = parseNum(iValComp.value);
+        const cot   = parseNum(iCot.value);
+        const total = parseNum(iTotAuto.value) || usdt * cot;
+        const pix   = parseNum(iValPix.value);
+        const ref   = iRefPix ? iRefPix.value.trim() : '';
+        const forn  = iSelForn ? iSelForn.value.trim() : '';
+
+        if (usdt===0 && pix===0) { toast('Preencha USDT ou o valor pago.','error'); return; }
+        if (usdt>0 && cot===0)   { toast('Informe a Cotação de Compra.','error'); return; }
+        if (!forn)               { toast('Selecione ou cadastre um fornecedor.','error'); return; }
+
+        const now = new Date();
+        opFornecedor.unshift({
+            ref:        Date.now(),
+            data:       now.toLocaleDateString('pt-BR'),
+            hora:       now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+            usdt, cotacao:cot, totalBrl:total, pix, pendente:usdt, ref, fornecedor:forn
+        });
+        salvarFornecedor();
+        carregarFornecedor();
+        limparForn();
+        toast('Operação registrada com sucesso!', 'success');
+    });
+
+    if (iFiltroD) iFiltroD.addEventListener('change', carregarFornecedor);
+    if (btnLimp)  btnLimp.addEventListener('click', () => { iFiltroD.value=''; carregarFornecedor(); });
+
+    // ── Gestão de fornecedores ────────────────────────────────
+    const btnAddForn  = document.getElementById('btn-add-fornecedor');
+    const inputNovoF  = document.getElementById('input-novo-fornecedor');
+
+    function popularSelectForn() {
+        if (!iSelForn) return;
+        const atual = iSelForn.value;
+        iSelForn.innerHTML = '<option value="">— Selecione o fornecedor —</option>';
+        cadFornecedores.forEach(f => {
+            const o = document.createElement('option');
+            o.value = f; o.textContent = f;
+            iSelForn.appendChild(o);
+        });
+        if (atual) iSelForn.value = atual;
+    }
+
+    if (btnAddForn && inputNovoF) {
+        btnAddForn.addEventListener('click', () => {
+            const nome = inputNovoF.value.trim();
+            if (!nome) { toast('Digite o nome do fornecedor.','error'); return; }
+            if (cadFornecedores.includes(nome)) { toast('Fornecedor já cadastrado.','error'); return; }
+            cadFornecedores.push(nome);
+            salvarFornecedores();
+            popularSelectForn();
+            iSelForn.value = nome;
+            inputNovoF.value = '';
+            toast('Fornecedor cadastrado!');
+        });
+    }
+
+    popularSelectForn();
+    window._popularSelectForn = popularSelectForn;
+    window._carregarFornecedor = carregarFornecedor;
+})();
+
+let opExibidas = [];
+
+function carregarFornecedor() {
+    const iFiltroD = document.getElementById('filtro-data');
+    const btnLimp  = document.getElementById('btn-limpar-filtro');
+    const tbHist   = document.getElementById('tabela-historico');
+    if (!tbHist) return;
+
+    let filtroData = '';
+    if (iFiltroD && iFiltroD.value) {
+        const p = iFiltroD.value.split('-');
+        filtroData = `${p[2]}/${p[1]}/${p[0]}`;
+        if (btnLimp) btnLimp.style.display='inline-block';
+    } else {
+        if (btnLimp) btnLimp.style.display='none';
+    }
+
+    opExibidas = filtroData ? opFornecedor.filter(o=>o.data===filtroData) : [...opFornecedor];
+
+    tbHist.innerHTML = '';
+    let totUsdt=0, totPendente=0, totBrl=0, totPix=0;
+
+    if (!opExibidas.length) {
+        const msg = filtroData ? `Sem operações em ${filtroData}.` : 'Nenhuma operação registrada ainda.';
+        tbHist.innerHTML = `<tr><td colspan="9" class="empty-state">${msg}</td></tr>`;
+    }
+
+    opExibidas.forEach(op => {
+        const idx      = opFornecedor.indexOf(op);
+        const saldoUsdt = saldoPorCompra(op.ref);
+        const pctUsado  = op.usdt > 0 ? (op.usdt - saldoUsdt) / op.usdt : 0;
+
+        totUsdt     += op.usdt;
+        totPendente += op.pendente;
+        totBrl      += op.totalBrl;
+        totPix      += op.pix;
+
+        // Verde = zerado (tudo vendido), amarelo = parcial, cinza = intacto
+        const corSaldo = saldoUsdt <= 0 ? '#4CAF50' : pctUsado > 0 ? '#ffc107' : '#a0a0a0';
+        const refStr   = op.ref ? `<br><small style="color:#555;font-weight:400;">${typeof op.ref === 'number' ? '' : op.ref}</small>` : '';
+        const fornStr  = op.fornecedor ? `<br><small style="color:#555;font-size:.75rem;">${op.fornecedor}</small>` : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${op.data}${fornStr}</td>
+            <td>${op.hora}</td>
+            <td style="color:#4CAF50;font-weight:700;">${fmtDisplay(op.usdt)}</td>
+            <td>R$ ${fmtCot(op.cotacao)}</td>
+            <td>R$ ${fmtDisplay(op.totalBrl)}</td>
+            <td style="color:#2196F3;font-weight:700;">R$ ${fmtDisplay(op.pix)}${refStr}</td>
+            <td style="color:${corSaldo};font-weight:700;">${fmtDisplay(saldoUsdt)}</td>
+            <td style="color:${op.pendente<=0?'#4CAF50':'#ff5555'};font-weight:700;">${fmtDisplay(op.pendente)}</td>
+            <td>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button class="btn-small ok" style="${op.pendente<=0?'opacity:.3;cursor:not-allowed;':''}"
+                        ${op.pendente<=0?'disabled':''}>Receber</button>
+                    <button class="btn-small del" title="Excluir">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+            </td>`;
+
+        tr.querySelectorAll('button')[0].addEventListener('click', () => {
+            if (op.pendente<=0) return;
+            const v = prompt(`Falta: ${fmtDisplay(op.pendente)} USDT\nQuantos recebeu agora?`);
+            if (!v) return;
+            const n = parseFloat(v.replace(/\./g,'').replace(',','.')) || 0;
+            if (n<=0) { toast('Valor inválido.','error'); return; }
+            if (n>op.pendente) { toast('Maior que o pendente!','error'); return; }
+            opFornecedor[idx].pendente -= n;
+            salvarFornecedor();
+            carregarFornecedor();
+            toast(`${fmtDisplay(n)} USDT recebidos!`, 'success');
+        });
+        tr.querySelectorAll('button')[1].addEventListener('click', () => {
+            if (confirm('Excluir esta operação permanentemente?')) {
+                opFornecedor.splice(idx,1);
+                salvarFornecedor();
+                carregarFornecedor();
+                toast('Operação excluída.', 'error');
+            }
+        });
+        tbHist.appendChild(tr);
+    });
+
+    let pendBrl = totBrl - totPix;
+    if (pendBrl<0) pendBrl=0;
+
+    const saldoDisp = saldoTotalDisponivel();
+    document.getElementById('card-vol-usdt').textContent      = fmtDisplay(totUsdt);
+    document.getElementById('card-vol-brl').textContent       = 'R$ '+fmtDisplay(totBrl);
+    document.getElementById('card-forn-comprado').textContent  = fmtDisplay(totUsdt);
+    document.getElementById('card-forn-pendente').textContent  = fmtDisplay(totPendente);
+    document.getElementById('card-pagar-enviado').textContent  = 'R$ '+fmtDisplay(totPix);
+    document.getElementById('card-pagar-pendente').textContent = 'R$ '+fmtDisplay(pendBrl);
+
+    // Card saldo disponível (novo)
+    const elSaldo = document.getElementById('card-saldo-disponivel');
+    if (elSaldo) elSaldo.textContent = fmtDisplay(saldoDisp) + ' USDT';
+
+    // Atualiza card de saldo em Operações também
+    const elOpSaldo = document.getElementById('op-card-saldo');
+    if (elOpSaldo) elOpSaldo.textContent = fmtDisplay(saldoDisp) + ' USDT';
+
+    // Exportar PDF
+    const btnPDF = document.getElementById('btn-exportar-pdf');
+    if (btnPDF) {
+        btnPDF.onclick = () => {
+            if (!opExibidas.length) { toast('Sem dados para exportar.','error'); return; }
+            exportarPDF(opExibidas);
+        };
+    }
+
+    dragScroll(document.getElementById('drag-fornecedor'));
+}
+
+carregarFornecedor();
+renderHome();
+// ============================================================
+// MÓDULO B — CLIENTES
+// ============================================================
+const tbClientes     = document.getElementById('tabela-clientes');
+const filtroCliHist  = document.getElementById('filtro-cliente-hist');
+const filtroDataCli  = document.getElementById('filtro-data-cli');
+
+// Cadastrar cliente
+document.getElementById('btn-cadastrar-cliente').addEventListener('click', ()=>{
+    const nome = document.getElementById('cad-nome').value.trim();
+    const cont = document.getElementById('cad-contato').value.trim();
+    const obs  = document.getElementById('cad-obs').value.trim();
+    if (!nome) { toast('Informe o nome do cliente.','error'); return; }
+    if (cadastrosCli.find(c=>c.nome.toLowerCase()===nome.toLowerCase())) {
+        toast('Cliente já cadastrado!','error'); return;
+    }
+    cadastrosCli.push({nome, contato:cont, obs, criadoEm: new Date().toLocaleDateString('pt-BR')});
+    salvarCadastros();
+    atualizarSelectsClientes();
+    document.getElementById('cad-nome').value='';
+    document.getElementById('cad-contato').value='';
+    document.getElementById('cad-obs').value='';
+    toast(`Cliente "${nome}" cadastrado com sucesso!`, 'success');
+});
+
+function atualizarSelectsClientes() {
+    const opts = cadastrosCli.map(c=>`<option value="${c.nome}">${c.nome}</option>`).join('');
+    if (filtroCliHist) filtroCliHist.innerHTML = '<option value="">Todos</option>' + opts;
+    // Atualiza select de operações também
+    if (window._popularClientesOp) window._popularClientesOp();
+}
+
+function carregarClientes() {
+    atualizarSelectsClientes();
+
+    const filtCli  = filtroCliHist ? filtroCliHist.value : '';
+    const filtData = (() => {
+        if (!filtroDataCli || !filtroDataCli.value) return '';
+        const p = filtroDataCli.value.split('-');
+        return `${p[2]}/${p[1]}/${p[0]}`;
+    })();
+
+    // Fonte: opOperacoes — só linhas com cliente preenchido
+    let dados = opOperacoes.filter(o => o.cliente);
+    if (filtCli)  dados = dados.filter(o => o.cliente === filtCli);
+    if (filtData) dados = dados.filter(o => o.data === filtData);
+
+    tbClientes.innerHTML = '';
+    if (!dados.length) {
+        tbClientes.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma venda registrada ainda.</td></tr>';
+    }
+
+    const statusCores = { concluida:'#4CAF50', andamento:'#2196F3', falta_pagar:'#ffc107', nos_devemos:'#ff9800', cancelada:'#ff5555' };
+    const statusNomes = { concluida:'Settled', andamento:'Processing', falta_pagar:'Payment Pending', nos_devemos:'Asset Pending', cancelada:'Voided' };
+
+    let totUsdt=0, totVenda=0, totLucro=0;
+
+    dados.forEach(op => {
+        totUsdt  += op.usdt      || 0;
+        totVenda += op.totalVenda|| 0;
+        totLucro += op.lucro     || 0;
+
+        // Asset Pending = status nos_devemos
+        const cor = statusCores[op.status] || '#888';
+        const txt = statusNomes[op.status] || op.status;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${op.data || '—'}</td>
+            <td>${op.hora || '—'}</td>
+            <td style="font-weight:600;">${op.cliente}</td>
+            <td style="color:#4CAF50;font-weight:700;">${fmtDisplay(op.usdt)}</td>
+            <td>${op.cotVenda ? 'R$ '+fmtCot(op.cotVenda) : '—'}</td>
+            <td>${op.totalVenda ? 'R$ '+fmtDisplay(op.totalVenda) : '—'}</td>
+            <td style="color:${(op.lucro||0)>0?'#4CAF50':'#888'};font-weight:700;">
+                ${op.lucro ? 'R$ '+fmtDisplay(op.lucro) : '—'}
+            </td>
+            <td>
+                <span class="badge-status" style="color:${cor};background:${cor}22;border:1px solid ${cor}44;
+                    display:inline-block;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:700;">
+                    ${txt}
+                </span>
+            </td>`;
+        tbClientes.appendChild(tr);
+    });
+
+    // Cards — calculados sobre TODOS (sem filtro) para refletir a realidade
+    const todosCli   = opOperacoes.filter(o => o.cliente);
+    const pendUsdt   = todosCli.filter(o => o.status==='nos_devemos').reduce((a,o)=>a+(o.usdt||0),0);
+    const totalUsdt  = todosCli.reduce((a,o)=>a+(o.usdt||0),0);
+    const totalVenda = todosCli.reduce((a,o)=>a+(o.totalVenda||0),0);
+    const totalLucro = todosCli.reduce((a,o)=>a+(o.lucro||0),0);
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('cli-total-clientes', cadastrosCli.length);
+    set('cli-vol-usdt',       fmtDisplay(totalUsdt));
+    set('cli-vol-brl',        'R$ '+fmtDisplay(totalVenda));
+    set('cli-pendente-usdt',  fmtDisplay(pendUsdt));
+    set('cli-lucro-total',    'R$ '+fmtDisplay(totalLucro));
+}
+
+if (filtroCliHist) filtroCliHist.addEventListener('change', carregarClientes);
+if (filtroDataCli) filtroDataCli.addEventListener('change', carregarClientes);
+
+carregarClientes();
+dragScroll(document.getElementById('drag-clientes'));
+
+// ============================================================
+// MÓDULO C — DASHBOARD DE LUCRO
+// ============================================================
+let periodoAtivo = 'semana';
+let graficoLucro = null;
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.addEventListener('click', ()=>{
+        document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        periodoAtivo = btn.dataset.period;
+        renderLucro();
+    });
+});
+
+function filtrarPorPeriodo(dados, campo='data') {
+    const hoje = new Date();
+    return dados.filter(op => {
+        const [d,m,a] = op[campo].split('/');
+        const dt = new Date(+a, +m-1, +d);
+        if (periodoAtivo==='semana') {
+            const diff = (hoje-dt)/(1000*60*60*24);
+            return diff <= 7;
+        }
+        if (periodoAtivo==='mes') {
+            return dt.getMonth()===hoje.getMonth() && dt.getFullYear()===hoje.getFullYear();
+        }
+        return true;
+    });
+}
+
+// ── Despesas ──────────────────────────────────────────────────
+let opDespesas = JSON.parse(localStorage.getItem('banco_despesas')) || [];
+function salvarDespesas() { localStorage.setItem('banco_despesas', JSON.stringify(opDespesas)); }
+
+(function initDespesas() {
+    const btnAdd = document.getElementById('btn-add-despesa');
+    const iDesc  = document.getElementById('desp-desc');
+    const iVal   = document.getElementById('desp-valor');
+    const iData  = document.getElementById('desp-data');
+    const iCat   = document.getElementById('desp-categoria');
+    if (!btnAdd) return;
+
+    // Data padrão = hoje
+    iData.value = new Date().toISOString().split('T')[0];
+
+    iVal.addEventListener('input', e => { e.target.value = fmtMoeda(e.target.value); });
+
+    btnAdd.addEventListener('click', () => {
+        const desc  = iDesc.value.trim();
+        const valor = parseNum(iVal.value);
+        const data  = iData.value;
+        const cat   = iCat.value;
+        if (!desc)  { toast('Informe a descrição.','error'); return; }
+        if (!valor) { toast('Informe o valor.','error'); return; }
+        if (!data)  { toast('Informe a data.','error'); return; }
+
+        const [a,m,d] = data.split('-');
+        opDespesas.unshift({
+            ref:   Date.now(),
+            data:  `${d}/${m}/${a}`,
+            desc, valor, cat,
+        });
+        salvarDespesas();
+        iDesc.value = ''; iVal.value = '';
+        iData.value = new Date().toISOString().split('T')[0];
+        renderLucro();
+        toast('Despesa registrada!');
+    });
+})();
+
+function renderDespesas() {
+    const tb = document.getElementById('tabela-despesas');
+    if (!tb) return;
+    const despPeriodo = filtrarPorPeriodo(opDespesas);
+    tb.innerHTML = '';
+    if (!despPeriodo.length) {
+        tb.innerHTML = '<tr><td colspan="5" class="empty-state">Nenhuma despesa no período.</td></tr>';
+        return;
+    }
+    const catLabel = { operacional:'Operacional', pessoal:'Pessoal', tecnologia:'Tecnologia', outros:'Outros' };
+    despPeriodo.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${d.data}</td>
+            <td style="font-weight:600;">${d.desc}</td>
+            <td><span class="badge-status pendente">${catLabel[d.cat]||d.cat}</span></td>
+            <td style="text-align:right;color:#ff5555;font-weight:700;">R$ ${fmtDisplay(d.valor)}</td>
+            <td>
+                <button class="btn-small del" onclick="excluirDespesa(${d.ref})">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+            </td>`;
+        tb.appendChild(tr);
+    });
+}
+
+function excluirDespesa(ref) {
+    if (!confirm('Excluir esta despesa?')) return;
+    opDespesas = opDespesas.filter(d => d.ref !== ref);
+    salvarDespesas();
+    renderLucro();
+    toast('Despesa excluída.');
+}
+
+function renderLucro() {
+    // Fonte: opOperacoes (tabela Excel) — operações com cotação de compra E venda
+    const dados = filtrarPorPeriodo(opOperacoes);
+    const despPeriodo = filtrarPorPeriodo(opDespesas);
+
+    let totLucro=0, totVolume=0, qtdOps=0;
+    const lucroPorDia = {};
+    const detalhe = [];
+
+    dados.forEach(op => {
+        if (!op.cotVenda || !op.cotCompra || !op.usdt) return;
+        const spread  = op.cotVenda - op.cotCompra;
+        const lucroOp = spread * op.usdt;
+        totLucro  += lucroOp;
+        totVolume += op.usdt;
+        qtdOps++;
+        lucroPorDia[op.data] = (lucroPorDia[op.data]||0) + lucroOp;
+        detalhe.push({ data:op.data, cliente:op.cliente||'—', usdt:op.usdt,
+            cotacaoCompra:op.cotCompra, cotacaoVenda:op.cotVenda, spread, lucroOp });
+    });
+
+    const totDespesas  = despPeriodo.reduce((s,d) => s+(d.valor||0), 0);
+    const lucroLiquido = totLucro - totDespesas;
+    const spreadMedio  = totVolume > 0 ? totLucro/totVolume : 0;
+
+    const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    set('lc-lucro-total',   'R$ '+fmtDisplay(totLucro));
+    set('lc-despesas',      'R$ '+fmtDisplay(totDespesas));
+    set('lc-lucro-liquido', 'R$ '+fmtDisplay(lucroLiquido));
+    set('lc-volume',        fmtDisplay(totVolume)+' USDT');
+    set('lc-spread-medio',  'R$ '+fmtCot(spreadMedio));
+    set('lc-qtd-ops',       qtdOps);
+
+    // Lucro líquido: cor verde/vermelho
+    const elLL = document.getElementById('lc-lucro-liquido');
+    if (elLL) elLL.style.color = lucroLiquido >= 0 ? '#2196F3' : '#ff5555';
+
+    // Gráfico — lucro bruto vs despesas por dia
+    const diasSet = new Set([
+        ...Object.keys(lucroPorDia),
+        ...despPeriodo.map(d => d.data)
+    ]);
+    const dias = [...diasSet].sort((a,b) => {
+        const [da,ma,aa]=a.split('/'); const [db,mb,ab]=b.split('/');
+        return new Date(+aa,+ma-1,+da)-new Date(+ab,+mb-1,+db);
+    });
+    const valoresLucro = dias.map(d => +(lucroPorDia[d]||0).toFixed(2));
+    const valoresDesp  = dias.map(d => {
+        const desp = despPeriodo.filter(x => x.data===d).reduce((s,x)=>s+x.valor,0);
+        return +(-desp).toFixed(2);
+    });
+
+    if (graficoLucro) graficoLucro.destroy();
+    const ctx = document.getElementById('grafico-lucro')?.getContext('2d');
+    if (ctx) {
+        graficoLucro = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dias,
+                datasets: [
+                    { label:'Lucro', data:valoresLucro, backgroundColor:'rgba(76,175,80,0.3)', borderColor:'rgba(76,175,80,0.9)', borderWidth:2, borderRadius:4 },
+                    { label:'Despesas', data:valoresDesp, backgroundColor:'rgba(255,85,85,0.2)', borderColor:'rgba(255,85,85,0.7)', borderWidth:2, borderRadius:4 },
+                ]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false,
+                plugins: { legend:{ labels:{ color:'#888', boxWidth:12 } } },
+                scales: {
+                    x: { grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#888'} },
+                    y: { grid:{color:'rgba(255,255,255,.04)'}, ticks:{color:'#888', callback:v=>'R$ '+fmtDisplay(v)} }
+                }
+            }
+        });
+    }
+
+    // Tabela despesas
+    renderDespesas();
+
+    // Tabela operações
+    const tb = document.getElementById('tabela-lucro');
+    if (!tb) return;
+    tb.innerHTML = '';
+    if (!detalhe.length) {
+        tb.innerHTML = '<tr><td colspan="7" class="empty-state">Sem operações com spread registrado no período.</td></tr>';
+        return;
+    }
+    detalhe.forEach(op => {
+        const cor = op.lucroOp >= 0 ? '#4CAF50' : '#ff5555';
+        const tr  = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${op.data}</td>
+            <td style="font-weight:600;">${op.cliente}</td>
+            <td>${fmtDisplay(op.usdt)}</td>
+            <td>R$ ${fmtCot(op.cotacaoCompra)}</td>
+            <td>R$ ${fmtCot(op.cotacaoVenda)}</td>
+            <td style="color:#ffc107;font-weight:700;">R$ ${fmtCot(op.spread)}</td>
+            <td style="color:${cor};font-weight:700;">R$ ${fmtDisplay(op.lucroOp)}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+// ============================================================
+// MÓDULO D — COTAÇÕES AO VIVO
+// ============================================================
+let cotacaoAtual      = 0;
+let graficoCotacao    = null;
+let cotacoesIniciadas = false;
+let velasData         = []; // dados do gráfico de velas
+
+function iniciarCotacoes() {
+    if (cotacoesIniciadas) return;
+    cotacoesIniciadas = true;
+    iniciarWidgetTV();
+    buscarVelas();
+    setInterval(buscarVelas, 300000);
+}
+
+// ── Widget TradingView — gráfico de velas ─────────────────────
+function iniciarWidgetTV() {
+    const chartContainer = document.getElementById('tv-chart-container');
+    if (!chartContainer || chartContainer.dataset.loaded) return;
+    chartContainer.dataset.loaded = '1';
+
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.onload = () => {
+        if (typeof TradingView === 'undefined') return;
+        new TradingView.widget({
+            autosize:         true,
+            symbol:           'FX_IDC:USDBRL',
+            interval:         'D',
+            timezone:         'America/Sao_Paulo',
+            theme:            'dark',
+            style:            '1',
+            locale:           'br',
+            toolbar_bg:       '#111',
+            backgroundColor:  'rgba(13,13,13,1)',
+            hide_top_toolbar: false,
+            hide_legend:      false,
+            save_image:       false,
+            container_id:     'tv-chart-container',
+        });
+    };
+    document.body.appendChild(script);
+
+    // Preço numérico via AwesomeAPI
+    buscarCotacaoSimples();
+    setInterval(buscarCotacaoSimples, 10000);
+}
+
+async function buscarCotacaoSimples() {
+    // Binance funciona sem CORS — mesma fonte da cotacao-cliente.html
+    try {
+        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=USDTBRL');
+        if (!r.ok) throw new Error('Binance ' + r.status);
+        const d = await r.json();
+        let preco = parseFloat(d.lastPrice);
+        // Binance às vezes retorna invertido (< 1)
+        if (preco < 1 && preco > 0) preco = 1 / preco;
+        if (preco < 3) throw new Error('Valor suspeito: ' + preco);
+
+        const lo  = parseFloat(d.lowPrice)  > 1 ? parseFloat(d.lowPrice)  : preco * 0.998;
+        const hi  = parseFloat(d.highPrice) > 1 ? parseFloat(d.highPrice) : preco * 1.002;
+        const pct = parseFloat(d.priceChangePercent) || 0;
+
+        cotacaoAtual = preco;
+        atualizarHeroCotacao(preco, lo, hi, pct, 'Binance · USDT/BRL');
+        return;
+    } catch(_) {}
+
+    // Fallback: AwesomeAPI
+    try {
+        const r = await fetch('https://economia.awesomeapi.com.br/json/last/USDT-BRL', { cache:'no-store' });
+        const d = await r.json();
+        const bid = parseFloat(d.USDTBRL.bid);
+        if (bid > 1) {
+            cotacaoAtual = bid;
+            atualizarHeroCotacao(bid,
+                parseFloat(d.USDTBRL.low),
+                parseFloat(d.USDTBRL.high),
+                parseFloat(d.USDTBRL.pctChange) || 0,
+                'AwesomeAPI · USDT/BRL');
+        }
+    } catch(_) {}
+}
+
+function buscarCotacao() { buscarCotacaoSimples(); }
+
+function atualizarHeroCotacao(preco, low, high, pctChg, fonte) {
+    document.getElementById('cot-preco-principal').textContent = 'R$ ' + fmtCot(preco);
+
+    const elVar = document.getElementById('cot-variacao');
+    if (pctChg !== 0) {
+        elVar.textContent = (pctChg >= 0 ? '▲ +' : '▽ ') + Math.abs(pctChg).toFixed(2) + '% nas últimas 24h';
+        elVar.className   = 'ch-change ' + (pctChg >= 0 ? 'up' : 'down');
+    } else {
+        elVar.textContent = '';
+    }
+
+    document.getElementById('cot-min').textContent = 'R$ ' + fmtCot(low);
+    document.getElementById('cot-max').textContent = 'R$ ' + fmtCot(high);
+
+    const elFonte = document.getElementById('cot-fonte');
+    if (elFonte) elFonte.textContent = fonte;
+
+    const elTPrice  = document.getElementById('ticker-price');
+    const elTChange = document.getElementById('ticker-change');
+    const elTMobile = document.getElementById('ticker-price-mobile');
+    if (elTPrice)  elTPrice.textContent  = 'R$ ' + fmtCot(preco);
+    if (elTMobile) elTMobile.textContent = 'R$ ' + fmtCot(preco);
+    if (elTChange && pctChg !== 0) {
+        elTChange.textContent = (pctChg >= 0 ? '+' : '') + pctChg.toFixed(2) + '%';
+        elTChange.className   = 'change ' + (pctChg >= 0 ? 'up' : 'down');
+    }
+
+    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('ultimo-update').textContent = 'Atualizado às ' + agora;
+
+    calcularSpread();
+}
+
+// ── Velas USDT/BRL — BCB histórico diário × fator USDT/USD ────
+async function buscarVelas() {
+    try {
+        const fim = new Date();
+        const ini = new Date(); ini.setDate(ini.getDate() - 50);
+
+        const fmtBcb = d => {
+            const dd   = String(d.getDate()).padStart(2,'0');
+            const mm   = String(d.getMonth()+1).padStart(2,'0');
+            return `${mm}-${dd}-${d.getFullYear()}`;
+        };
+
+        const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@di,dataFinalCotacao=@df)?@di='${fmtBcb(ini)}'&@df='${fmtBcb(fim)}'&$top=200&$orderby=dataHoraCotacao%20asc&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`;
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('BCB error');
+        const d = await r.json();
+        const itens = d.value;
+        if (!itens || !itens.length) throw new Error('Sem dados BCB');
+
+        // Agrupa por dia (formato dataHoraCotacao: "YYYY-MM-DD HH:MM:SS.mmm")
+        const porDia = {};
+        itens.forEach(item => {
+            // Extrai só a data "YYYY-MM-DD"
+            const dia = item.dataHoraCotacao.substring(0, 10);
+            if (!porDia[dia]) porDia[dia] = [];
+            const med = (parseFloat(item.cotacaoCompra) + parseFloat(item.cotacaoVenda)) / 2;
+            porDia[dia].push(med);
+        });
+
+        const dias = Object.keys(porDia).sort().slice(-30);
+
+        velasData = dias.map((dia, i) => {
+            const vals  = porDia[dia];
+            const close = vals[vals.length - 1];
+            const open  = i > 0 ? porDia[dias[i-1]][porDia[dias[i-1]].length - 1] : vals[0];
+            const high  = Math.max(...vals);
+            const low   = Math.min(...vals);
+            // Formata label DD/MM
+            const partes = dia.split('-');
+            return { t: `${partes[2]}/${partes[1]}`, open, high, low, close };
+        });
+
+        renderVelas();
+    } catch(e) {
+        console.warn('Erro velas BCB:', e);
+    }
+}
+
+// ── Gráfico de Velas Japonesas (Candlestick) ──────────────────
+function renderVelas() {
+    const ctx = document.getElementById('grafico-cotacao');
+    if (!ctx) return;
+    if (graficoCotacao) { graficoCotacao.destroy(); graficoCotacao = null; }
+    if (!velasData.length) return;
+
+    const labels     = velasData.map(v => v.t);
+    const corVela    = velasData.map(v => v.close >= v.open ? 'rgba(76,175,80,0.85)'  : 'rgba(255,85,85,0.85)');
+    const corBorda   = velasData.map(v => v.close >= v.open ? '#4CAF50' : '#ff5555');
+
+    // Corpo: base = min(open,close), altura = |close - open|
+    const corpoBase  = velasData.map(v => Math.min(v.open, v.close));
+    const corpoAlto  = velasData.map(v => Math.max(0.0001, Math.abs(v.close - v.open)));
+
+    // Pavio inferior: low → min(open,close)
+    const pavInfBase = velasData.map(v => v.low);
+    const pavInfAlto = velasData.map(v => Math.max(0, Math.min(v.open, v.close) - v.low));
+
+    // Pavio superior: max(open,close) → high
+    const pavSupBase = velasData.map(v => Math.max(v.open, v.close));
+    const pavSupAlto = velasData.map(v => Math.max(0, v.high - Math.max(v.open, v.close)));
+
+    graficoCotacao = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Corpo',
+                    data: corpoAlto, base: corpoBase,
+                    backgroundColor: corVela, borderColor: corBorda,
+                    borderWidth: 1, borderRadius: 1, barPercentage: 0.55,
+                },
+                {
+                    label: 'Pavio Inf',
+                    data: pavInfAlto, base: pavInfBase,
+                    backgroundColor: corBorda, borderColor: corBorda,
+                    borderWidth: 1, barPercentage: 0.07,
+                },
+                {
+                    label: 'Pavio Sup',
+                    data: pavSupAlto, base: pavSupBase,
+                    backgroundColor: corBorda, borderColor: corBorda,
+                    borderWidth: 1, barPercentage: 0.07,
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1a1a1a', borderColor: '#333', borderWidth: 1,
+                    titleColor: '#a0a0a0', bodyColor: '#e0e0e0', padding: 12,
+                    callbacks: {
+                        title: items => 'USDT/BRL — ' + labels[items[0].dataIndex],
+                        label: item => {
+                            if (item.datasetIndex !== 0) return null;
+                            const v = velasData[item.dataIndex];
+                            return [
+                                ` Abertura:    R$ ${fmtCot(v.open)}`,
+                                ` Fechamento:  R$ ${fmtCot(v.close)}`,
+                                ` Máxima:      R$ ${fmtCot(v.high)}`,
+                                ` Mínima:      R$ ${fmtCot(v.low)}`,
+                            ];
+                        },
+                        filter: item => item.datasetIndex === 0,
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: false,
+                    grid:  { color: 'rgba(255,255,255,.04)' },
+                    ticks: { color: '#555', maxTicksLimit: 12, font: { size: 11 } }
+                },
+                y: {
+                    grid:  { color: 'rgba(255,255,255,.04)' },
+                    ticks: { color: '#888', font: { size: 11 }, callback: v => 'R$ ' + fmtCot(v) }
+                }
+            }
+        }
+    });
+}
+
+// ── Calculadora de Spread (simplificada) ─────────────────────
+function calcularSpread() {
+    const elMercado = document.getElementById('calc-mercado');
+    const elFinal   = document.getElementById('calc-preco-final');
+    const elSpreadRs= document.getElementById('calc-spread-rs');
+    const elInput   = document.getElementById('calc-spread-input');
+
+    elMercado.textContent = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
+
+    const spreadPct = parseFloat((elInput ? elInput.value : '0').replace(',', '.')) || 0;
+
+    if (cotacaoAtual > 0 && spreadPct > 0) {
+        const precoFinal = cotacaoAtual * (1 + spreadPct / 100);
+        const spreadRs   = precoFinal - cotacaoAtual;
+
+        elFinal.textContent   = 'R$ ' + fmtCot(precoFinal);
+        elSpreadRs.textContent = 'R$ ' + fmtCot(spreadRs);
+    } else {
+        elFinal.textContent   = cotacaoAtual > 0 ? 'R$ ' + fmtCot(cotacaoAtual) : '—';
+        elSpreadRs.textContent = '—';
+    }
+}
+
+// ── Copiar cotação com spread ─────────────────────────────────
+function copiarCotacao() {
+    const el = document.getElementById('calc-preco-final');
+    const texto = el?.textContent.replace('R$ ','').trim();
+    if (!texto || texto === '—') { toast('Calcule o spread primeiro.','error'); return; }
+    navigator.clipboard.writeText(texto)
+        .then(() => toast('Número copiado! ✓'))
+        .catch(() => toast('Não foi possível copiar.','error'));
+}
+
+function gerarPrintCotacao() {
+    const precoEl = document.getElementById('calc-preco-final');
+    const mercEl  = document.getElementById('calc-mercado');
+    if (!precoEl || precoEl.textContent === '—') { toast('Calcule o spread primeiro.','error'); return; }
+
+    const preco   = precoEl.textContent;
+    const mercado = mercEl?.textContent || '—';
+    const hora    = new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+    // Abre nova janela com o print profissional
+    const w = window.open('','_blank','width=540,height=400');
+    w.document.write(`<!DOCTYPE html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AXONE | FX Suite</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>AXONE — Cotação</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d0d0d; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:Inter,sans-serif; }
+  .card { background:#111; border:1px solid #222; border-radius:16px; padding:40px 48px; width:460px; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; padding-bottom:20px; border-bottom:1px solid #1e1e1e; }
+  .logo-name { font-size:1.2rem; font-weight:700; letter-spacing:5px; color:#fff; }
+  .logo-sub  { font-size:.6rem; letter-spacing:3px; color:#444; margin-top:3px; }
+  .hora      { font-size:.72rem; color:#444; text-align:right; }
+  .label     { font-size:.65rem; letter-spacing:.14em; color:#444; text-transform:uppercase; margin-bottom:10px; }
+  .preco     { font-size:3.2rem; font-weight:700; color:#fff; letter-spacing:-1px; line-height:1; }
+  .footer    { display:flex; justify-content:space-between; margin-top:28px; padding-top:18px; border-top:1px solid #1a1a1a; font-size:.72rem; color:#444; }
+  .footer span b { color:#777; }
+  .btn { display:block; width:100%; margin-top:24px; background:#4CAF50; color:#000; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:.88rem; cursor:pointer; font-family:Inter,sans-serif; letter-spacing:.04em; }
+  @media print { .btn { display:none; } body { background:#fff; } .card { border:none; background:#fff; } .logo-name,.preco { color:#000; } .label,.hora,.footer { color:#888; } }
+</style>
 </head>
 <body>
-
-<!-- ═══════════════ TOP NAV ═══════════════ -->
-<nav class="top-nav">
-    <!-- Logo -->
-    <div class="nav-logo">
-        <div class="line"></div>
-        <div>
-            <div class="kroma">AXONE</div>
-            <div class="cap">FX SUITE</div>
-        </div>
+<div class="card">
+  <div class="header">
+    <div>
+      <div class="logo-name">AXONE</div>
+      <div class="logo-sub">FX SUITE</div>
     </div>
-
-    <!-- Desktop links (visível só em 900px+) -->
-    <div class="nav-links">
-        <a href="#" class="active" data-page="home">Home</a>
-        <a href="#" data-page="operacoes">Operações</a>
-        <a href="#" data-page="fornecedor">Fornecedor</a>
-        <a href="#" data-page="clientes">Clientes</a>
-        <a href="#" data-page="lucro">Dashboard Lucro</a>
-        <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
-    </div>
-
-    <!-- Desktop: ticker + user + logout agrupados à direita -->
-    <div class="nav-right-desktop">
-        <div class="live-ticker" id="nav-ticker">
-            <div class="dot"></div>
-            <span class="label">USDT/BRL</span>
-            <span class="price" id="ticker-price">—</span>
-            <span class="change" id="ticker-change"></span>
-        </div>
-        <span class="nav-user">Olá, <strong id="nome-usuario">Gestor</strong></span>
-        <button class="btn-logout" onclick="logout()">Sair</button>
-    </div>
-
-    <!-- Mobile: ticker compacto + hamburguer -->
-    <div class="live-ticker live-ticker-mobile" id="nav-ticker-mobile">
-        <div class="dot"></div>
-        <span class="price" id="ticker-price-mobile">—</span>
-    </div>
-    <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
-        <span></span><span></span><span></span>
-    </button>
-</nav>
-
-<!-- Drawer mobile -->
-<div class="nav-drawer" id="nav-drawer">
-    <a href="#" class="active" data-page="home">Home</a>
-    <a href="#" data-page="operacoes">Operações</a>
-    <a href="#" data-page="fornecedor">Fornecedor</a>
-    <a href="#" data-page="clientes">Clientes</a>
-    <a href="#" data-page="lucro">Dashboard Lucro</a>
-    <a href="#" data-page="cotacoes">Cotações ao Vivo</a>
-    <hr class="nav-drawer-sep">
-    <div class="nav-drawer-user">
-        <span>Olá, <strong id="nome-usuario-mobile">Gestor</strong></span>
-        <button class="btn-logout" onclick="logout()">Sair</button>
-    </div>
+    <div class="hora">${hora}</div>
+  </div>
+  <div class="label">USDT / BRL — Cotação de Venda</div>
+  <div class="preco">${preco}</div>
+  <div class="footer">
+    <span>Mercado: <b>${mercado}</b></span>
+    <span>Válido por 30 segundos</span>
+  </div>
+  <button class="btn" onclick="window.print()">Imprimir / Salvar PDF</button>
 </div>
-
-<!-- ═══════════════ MAIN ═══════════════════ -->
-<div class="main-content">
-
-    <!-- ═══════════════ HOME ═══════════════ -->
-    <section class="page-section active" id="page-home">
-
-        <!-- Header: saudação + data -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
-            <div>
-                <h1 id="home-greeting" style="font-size:1.5rem;font-weight:700;margin:0;">Bem-vindo</h1>
-                <div id="home-tagline" class="fade-in">Inteligência de mercado ao seu alcance.</div>
-            </div>
-            <div style="text-align:right;">
-                <div id="home-date" style="font-size:.85rem;color:#a0a0a0;font-weight:500;"></div>
-                <div id="home-time"></div>
-            </div>
-        </div>
-
-        <!-- KPI Cards — 3 colunas principais -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;">
-            <div class="card" style="border-color:rgba(76,175,80,.3);">
-                <h3>Saldo Disponível</h3>
-                <div class="value" style="color:#4CAF50;font-size:1.3rem;" id="home-saldo">0,00 USDT</div>
-                <div class="subtitle">Em estoque para vender</div>
-            </div>
-            <div class="card highlight">
-                <h3>Lucro do Mês</h3>
-                <div class="value" style="font-size:1.3rem;" id="home-lucro-mes">R$ 0,00</div>
-                <div class="subtitle">Spread acumulado</div>
-            </div>
-            <div class="card" style="border-color:rgba(33,150,243,.3);">
-                <h3>Volume do Mês</h3>
-                <div class="value" style="color:#2196F3;font-size:1.3rem;" id="home-volume-mes">0,00 USDT</div>
-                <div class="subtitle">Total negociado</div>
-            </div>
-            <div class="card" style="border-color:rgba(255,193,7,.25);">
-                <h3>Ops. Abertas</h3>
-                <div class="value" style="color:#ffc107;font-size:1.3rem;" id="home-ops-abertas">0</div>
-                <div class="subtitle">Processing + Payment Pending</div>
-            </div>
-            <div class="card" style="border-color:rgba(255,152,0,.3);">
-                <h3>Asset Pending</h3>
-                <div class="value" style="color:#ff9800;font-size:1.3rem;" id="home-asset-pending">0,00 USDT</div>
-                <div class="subtitle">USDT a enviar clientes</div>
-            </div>
-            <div class="card" style="border-color:rgba(255,85,85,.25);">
-                <h3>A Pagar Forn.</h3>
-                <div class="value" style="color:#ff5555;font-size:1.3rem;" id="home-a-pagar">R$ 0,00</div>
-                <div class="subtitle">BRL pendente</div>
-            </div>
-        </div>
-
-        <!-- Gráficos -->
-        <div class="home-grid" style="margin-bottom:24px;">
-            <div class="chart-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <h3 style="font-size:.9rem;margin:0;">Lucro dos Últimos 30 Dias</h3>
-                    <span style="font-size:.72rem;color:#555;">R$ por dia</span>
-                </div>
-                <div class="chart-wrap" style="height:180px;">
-                    <canvas id="home-chart-lucro"></canvas>
-                </div>
-            </div>
-            <div class="chart-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <h3 style="font-size:.9rem;margin:0;">Volume Negociado (30 dias)</h3>
-                    <span style="font-size:.72rem;color:#555;">USDT por dia</span>
-                </div>
-                <div class="chart-wrap" style="height:180px;">
-                    <canvas id="home-chart-volume"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tabelas lado a lado -->
-        <div class="home-grid">
-            <div class="table-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                    <h2 style="font-size:.9rem;margin:0;">Últimas Operações</h2>
-                    <a href="#" data-page="operacoes" class="home-link">Ver todas →</a>
-                </div>
-                <table style="width:100%;">
-                    <thead><tr>
-                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
-                        <th style="font-size:.72rem;padding:5px 8px;">Cliente</th>
-                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
-                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Lucro</th>
-                        <th style="font-size:.72rem;padding:5px 8px;">Status</th>
-                    </tr></thead>
-                    <tbody id="home-tabela-ops"></tbody>
-                </table>
-            </div>
-            <div class="table-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                    <h2 style="font-size:.9rem;margin:0;">Últimas Compras</h2>
-                    <a href="#" data-page="fornecedor" class="home-link">Ver todas →</a>
-                </div>
-                <table style="width:100%;">
-                    <thead><tr>
-                        <th style="font-size:.72rem;padding:5px 8px;">Data</th>
-                        <th style="font-size:.72rem;padding:5px 8px;">Fornecedor</th>
-                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">USDT</th>
-                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Cotação</th>
-                        <th style="font-size:.72rem;padding:5px 8px;text-align:right;">Saldo</th>
-                    </tr></thead>
-                    <tbody id="home-tabela-compras"></tbody>
-                </table>
-            </div>
-        </div>
-
-    </section>
-
-    <section class="page-section" id="page-fornecedor">
-
-        <div class="section-header">
-            <div>
-                <h1>Fornecedor</h1>
-                <p id="data-atual"></p>
-            </div>
-        </div>
-
-        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,280px));">
-            <div class="card" style="border-color:rgba(33,150,243,.3);">
-                <h3>Volume Comprado (Hoje)</h3>
-                <div class="value" style="color:#2196F3;"><span id="card-vol-usdt">0,00</span> USDT</div>
-                <div class="subtitle">Investido: <span id="card-vol-brl">R$ 0,00</span></div>
-            </div>
-            <div class="card" style="border-color:rgba(255,193,7,.25);">
-                <h3>Fluxo Fornecedor (USDT)</h3>
-                <div class="value" style="color:#ffc107;"><span id="card-forn-comprado">0,00</span> USDT</div>
-                <div class="subtitle" style="color:#ff5555;">Pendente a receber: <span id="card-forn-pendente">0,00</span></div>
-            </div>
-            <div class="card" style="border-color:rgba(255,85,85,.25);">
-                <h3>Contas a Pagar (BRL)</h3>
-                <div class="value" style="color:#e0e0e0;"><span id="card-pagar-enviado">R$ 0,00</span></div>
-                <div class="subtitle" style="color:#ff5555;">Pendente a enviar: <span id="card-pagar-pendente">R$ 0,00</span></div>
-            </div>
-            <div class="card" style="border-color:rgba(76,175,80,.3);">
-                <h3>Saldo Disponível</h3>
-                <div class="value" style="color:#4CAF50;" id="card-saldo-disponivel">0,00 USDT</div>
-                <div class="subtitle">USDT em estoque (não vendido)</div>
-            </div>
-        </div>
-
-        <!-- Formulário Fornecedor -->
-        <div class="op-card">
-
-            <!-- Bloco 0: Fornecedor -->
-            <div class="form-section-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="1"/></svg>
-                Fornecedor
-            </div>
-            <div class="form-grid" style="margin-bottom:16px;">
-                <div class="input-group">
-                    <label>Selecionar Fornecedor</label>
-                    <select id="select-fornecedor"><option value="">— Selecione —</option></select>
-                </div>
-                <div class="input-group">
-                    <label>Cadastrar Novo Fornecedor</label>
-                    <div style="display:flex;gap:8px;">
-                        <input type="text" placeholder="Nome do fornecedor" id="input-novo-fornecedor" style="flex:1;">
-                        <button class="btn-secondary" id="btn-add-fornecedor" style="padding:0 16px;white-space:nowrap;font-size:.82rem;">+ Adicionar</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-divider"></div>
-
-            <!-- Bloco 1: Compra -->
-            <div class="form-section-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-                Compra
-            </div>
-            <div class="form-grid" style="margin-bottom:0;">
-                <div class="input-group">
-                    <label>Valor Comprado (USDT)</label>
-                    <input type="text" placeholder="0,00" id="valor-comprado">
-                </div>
-                <div class="input-group">
-                    <label>Cotação de Compra (R$)</label>
-                    <input type="text" placeholder="0,00" id="cotacao">
-                </div>
-                <div class="input-group">
-                    <label>Total Automático (R$)</label>
-                    <input type="text" placeholder="0,00" id="total-automatico" disabled>
-                </div>
-            </div>
-
-            <div class="form-divider"></div>
-
-            <!-- Bloco 2: Pagamento -->
-            <div class="form-section-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-                Pagamento
-            </div>
-            <div class="form-grid" style="margin-bottom:0;">
-                <div class="input-group">
-                    <label>Valor Pago (R$)</label>
-                    <input type="text" placeholder="0,00" id="valor-pix">
-                </div>
-                <div class="input-group">
-                    <label>Referência</label>
-                    <input type="text" placeholder="Ex: TED Lote 01, Pix Ref. 22..." id="referencia-pix">
-                </div>
-            </div>
-
-            <div class="action-row" style="margin-top:24px;">
-                <button class="btn-primary" id="btn-registrar">Registrar Operação</button>
-                <button class="btn-danger"  id="btn-cancelar"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancelar</button>
-            </div>
-        </div>
-
-        <!-- Histórico Fornecedor -->
-        <div class="section-header" style="margin-top:40px;">
-            <h2>Histórico de Operações</h2>
-            <div class="filter-row" style="margin-bottom:0;">
-                <label>Filtrar:</label>
-                <input type="date" id="filtro-data">
-                <button class="btn-small del" id="btn-limpar-filtro" style="display:none;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-                <button class="btn-secondary" id="btn-exportar-pdf" style="padding:8px 16px; font-size:.82rem;">Exportar PDF</button>
-            </div>
-        </div>
-
-        <div class="table-card">
-            <div class="table-responsive" id="drag-fornecedor">
-                <table>
-                    <thead><tr>
-                        <th>Data / Fornecedor</th><th>Hora</th><th>USDT Comprado</th>
-                        <th>Cotação</th><th>Total (R$)</th><th>Valor Pago</th>
-                        <th>Saldo Disponível</th><th>Falta Receber</th><th>Ações</th>
-                    </tr></thead>
-                    <tbody id="tabela-historico">
-                        <tr><td colspan="9" class="empty-state">Nenhuma operação registrada ainda.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </section>
-
-    <!-- ─── PÁGINA 2: CLIENTES ────────────── -->
-    <section class="page-section" id="page-clientes">
-
-        <div class="section-header">
-            <div><h1>Clientes</h1><p>Carteira de clientes e histórico de operações</p></div>
-        </div>
-
-        <!-- Cards resumo clientes -->
-        <div class="cards-grid">
-            <div class="card" style="border-color:rgba(33,150,243,.3);">
-                <h3>Total de Clientes</h3>
-                <div class="value" style="color:#2196F3;"><span id="cli-total-clientes">0</span></div>
-                <div class="subtitle">Cadastrados no sistema</div>
-            </div>
-            <div class="card" style="border-color:rgba(76,175,80,.3);">
-                <h3>Volume Vendido</h3>
-                <div class="value" style="color:#4CAF50;"><span id="cli-vol-usdt">0,00</span> USDT</div>
-                <div class="subtitle">Total em R$: <span id="cli-vol-brl">R$ 0,00</span></div>
-            </div>
-            <div class="card" style="border-color:rgba(255,152,0,.3);">
-                <h3>Asset Pending</h3>
-                <div class="value" style="color:#ff9800;"><span id="cli-pendente-usdt">0,00</span> USDT</div>
-                <div class="subtitle">USDT a enviar aos clientes</div>
-            </div>
-            <div class="card" style="border-color:rgba(76,175,80,.2);">
-                <h3>Lucro Total</h3>
-                <div class="value" style="color:#4CAF50;" id="cli-lucro-total">R$ 0,00</div>
-                <div class="subtitle">Spread acumulado de vendas</div>
-            </div>
-        </div>
-
-        <!-- Cadastro de clientes -->
-        <div class="op-card">
-            <div class="form-section-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Cadastrar Cliente
-            </div>
-            <div class="form-grid" style="margin-bottom:0;">
-                <div class="input-group">
-                    <label>Nome Completo</label>
-                    <input type="text" placeholder="Ex: João da Silva" id="cad-nome">
-                </div>
-                <div class="input-group">
-                    <label>Contato (WhatsApp / e-mail)</label>
-                    <input type="text" placeholder="Ex: (11) 9 9999-0000" id="cad-contato">
-                </div>
-                <div class="input-group">
-                    <label>Observação</label>
-                    <input type="text" placeholder="Ex: Cliente VIP" id="cad-obs">
-                </div>
-            </div>
-            <div class="action-row" style="margin-top:20px;">
-                <button class="btn-primary" id="btn-cadastrar-cliente">Cadastrar</button>
-            </div>
-        </div>
-
-        <!-- Histórico clientes -->
-        <div class="section-header" style="margin-top:40px;">
-            <h2>Histórico de Vendas</h2>
-            <div class="filter-row" style="margin-bottom:0;">
-                <label>Cliente:</label>
-                <select id="filtro-cliente-hist" style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:7px 12px;border-radius:7px;font-size:.85rem;outline:none;">
-                    <option value="">Todos</option>
-                </select>
-                <label>Data:</label>
-                <input type="date" id="filtro-data-cli">
-            </div>
-        </div>
-
-        <div class="table-card">
-            <div class="table-responsive" id="drag-clientes">
-                <table>
-                    <thead><tr>
-                        <th>Data</th><th>Hora</th><th>Cliente</th>
-                        <th>USDT</th><th>Cot. Venda</th><th>Total (R$)</th>
-                        <th>Lucro</th><th>Status</th>
-                    </tr></thead>
-                    <tbody id="tabela-clientes">
-                        <tr><td colspan="8" class="empty-state">Nenhuma venda registrada ainda.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </section>
-
-    <!-- ─── PÁGINA 3: DASHBOARD LUCRO ─────── -->
-    <section class="page-section" id="page-lucro">
-
-        <div class="section-header">
-            <div><h1>Dashboard de Lucro</h1><p>Resultado financeiro do período</p></div>
-            <div class="period-selector">
-                <button class="period-btn active" data-period="semana">Semanal</button>
-                <button class="period-btn" data-period="mes">Mensal</button>
-                <button class="period-btn" data-period="tudo">Tudo</button>
-            </div>
-        </div>
-
-        <!-- Cards KPI -->
-        <div class="lucro-cards">
-            <div class="lucro-card green">
-                <div class="lc-label">Lucro Bruto (Spread)</div>
-                <div class="lc-val" id="lc-lucro-total">R$ 0,00</div>
-                <div class="lc-sub">Diferença cot. compra vs venda</div>
-            </div>
-            <div class="lucro-card" style="border-color:rgba(255,85,85,.3);">
-                <div class="lc-label">Total de Despesas</div>
-                <div class="lc-val" style="color:#ff5555;" id="lc-despesas">R$ 0,00</div>
-                <div class="lc-sub">Registradas no período</div>
-            </div>
-            <div class="lucro-card" style="border-color:rgba(33,150,243,.3);">
-                <div class="lc-label">Lucro Líquido</div>
-                <div class="lc-val" style="color:#2196F3;" id="lc-lucro-liquido">R$ 0,00</div>
-                <div class="lc-sub">Spread menos despesas</div>
-            </div>
-            <div class="lucro-card blue">
-                <div class="lc-label">Volume Negociado</div>
-                <div class="lc-val" id="lc-volume">0,00 USDT</div>
-                <div class="lc-sub">Total operado no período</div>
-            </div>
-            <div class="lucro-card yellow">
-                <div class="lc-label">Spread Médio</div>
-                <div class="lc-val" id="lc-spread-medio">R$ 0,00</div>
-                <div class="lc-sub">Por USDT negociado</div>
-            </div>
-            <div class="lucro-card" style="border-color:rgba(224,224,224,.15);">
-                <div class="lc-label">Operações</div>
-                <div class="lc-val" id="lc-qtd-ops" style="color:#e0e0e0;">0</div>
-                <div class="lc-sub">No período selecionado</div>
-            </div>
-        </div>
-
-        <!-- Gráfico -->
-        <div class="chart-card">
-            <h3>Lucro por Dia (R$)</h3>
-            <div class="chart-wrap">
-                <canvas id="grafico-lucro"></canvas>
-            </div>
-        </div>
-
-        <!-- Despesas -->
-        <div class="section-header" style="margin-top:8px;">
-            <h2>Despesas</h2>
-        </div>
-        <div class="op-card">
-            <div class="form-grid" style="margin-bottom:0;">
-                <div class="input-group">
-                    <label>Descrição</label>
-                    <input type="text" id="desp-desc" placeholder="Ex: Aluguel, Energia, Funcionário...">
-                </div>
-                <div class="input-group">
-                    <label>Valor (R$)</label>
-                    <input type="text" id="desp-valor" placeholder="0,00">
-                </div>
-                <div class="input-group">
-                    <label>Data</label>
-                    <input type="date" id="desp-data">
-                </div>
-                <div class="input-group">
-                    <label>Categoria</label>
-                    <select id="desp-categoria">
-                        <option value="operacional">Operacional</option>
-                        <option value="pessoal">Pessoal</option>
-                        <option value="tecnologia">Tecnologia</option>
-                        <option value="outros">Outros</option>
-                    </select>
-                </div>
-            </div>
-            <div class="action-row" style="margin-top:16px;">
-                <button class="btn-primary" id="btn-add-despesa">+ Registrar Despesa</button>
-            </div>
-        </div>
-
-        <div class="table-card" style="margin-top:8px;">
-            <div class="table-responsive">
-                <table>
-                    <thead><tr>
-                        <th>Data</th><th>Descrição</th><th>Categoria</th>
-                        <th style="text-align:right;">Valor (R$)</th><th>Ações</th>
-                    </tr></thead>
-                    <tbody id="tabela-despesas">
-                        <tr><td colspan="5" class="empty-state">Nenhuma despesa registrada.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Tabela operações -->
-        <div class="section-header" style="margin-top:24px;">
-            <h2>Detalhamento por Operação</h2>
-        </div>
-        <div class="table-card">
-            <div class="table-responsive">
-                <table>
-                    <thead><tr>
-                        <th>Data</th><th>Cliente</th><th>USDT</th>
-                        <th>Cot. Compra</th><th>Cot. Venda</th><th>Spread/USDT</th><th>Lucro (R$)</th>
-                    </tr></thead>
-                    <tbody id="tabela-lucro">
-                        <tr><td colspan="7" class="empty-state">Sem dados no período.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </section>
-
-    <!-- ─── PÁGINA 4: COTAÇÕES AO VIVO ────── -->
-    <section class="page-section" id="page-cotacoes">
-
-        <div class="section-header">
-            <div><h1>Cotações ao Vivo</h1><p>USDT/BRL — Dólar Comercial em tempo real</p></div>
-            <div style="display:flex;align-items:center;gap:12px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <div class="dot" style="width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 1.8s infinite;"></div>
-                    <span style="font-size:.82rem;color:#a0a0a0;" id="ultimo-update">Atualizando...</span>
-                </div>
-                <!-- Botão compartilhar tela do cliente -->
-                <button class="btn-secondary" id="btn-abrir-share" style="display:flex;align-items:center;gap:8px;padding:9px 18px;font-size:.82rem;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    Compartilhar com Cliente
-                </button>
-            </div>
-        </div>
-
-        <!-- Hero cotação -->
-        <div class="cotacao-hero">
-            <div class="ch-label">USDT / BRL — Preço de Mercado</div>
-            <div class="ch-price" id="cot-preco-principal">Carregando...</div>
-            <div class="ch-change" id="cot-variacao"></div>
-            <div class="ch-meta">
-                <span>Mínima 24h: <strong id="cot-min">—</strong></span>
-                <span>Máxima 24h: <strong id="cot-max">—</strong></span>
-                <span>Atualização: <strong>5s</strong></span>
-                <span>Fonte: <strong id="cot-fonte">—</strong></span>
-            </div>
-        </div>
-
-        <!-- Calculadora de Spread -->
-        <div class="spread-card">
-            <h3 style="margin:0 0 24px;font-size:.95rem;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
-                Calculadora de Spread
-            </h3>
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px;align-items:end;">
-
-                <div class="spread-item">
-                    <div class="si-label">Cotação de Mercado (R$)</div>
-                    <div class="si-val blue" id="calc-mercado" style="font-size:1.5rem;">—</div>
-                </div>
-
-                <div class="spread-item">
-                    <div class="si-label">Spread (%)</div>
-                    <input type="text" id="calc-spread-input" placeholder="Ex: 0,60"
-                        style="background:#1a1a1a;border:1px solid #383838;color:#fff;padding:12px 14px;border-radius:8px;font-size:1.1rem;font-weight:600;outline:none;width:100%;max-width:180px;box-sizing:border-box;transition:.2s;"
-                        oninput="calcularSpread()">
-                </div>
-
-                <!-- Preço final + botão copiar lado a lado -->
-                <div class="spread-item">
-                    <div class="si-label">Preço Final com Spread (R$)</div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <div style="font-size:1.5rem;font-weight:700;color:#fff;" id="calc-preco-final">—</div>
-                        <button onclick="copiarCotacao()" title="Copiar cotação"
-                            style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 10px;border-radius:8px;cursor:pointer;transition:.2s;flex-shrink:0;display:flex;align-items:center;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="spread-item">
-                    <div class="si-label">Spread por USDT (R$)</div>
-                    <div class="si-val" style="color:#ffc107;font-size:1.3rem;" id="calc-spread-rs">—</div>
-                </div>
-
-            </div>
-
-            <!-- Botão print -->
-            <div style="margin-top:24px;">
-                <button onclick="gerarPrintCotacao()"
-                    style="display:flex;align-items:center;gap:8px;background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.3);color:#4CAF50;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:600;transition:.2s;letter-spacing:.03em;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Enviar Cotação via Print
-                </button>
-            </div>
-        </div>
-
-        <!-- Card de print invisível — só aparece para captura -->
-        <div id="cotacao-print-card" style="display:none;position:fixed;top:-9999px;left:-9999px;
-            width:480px;background:#0d0d0d;border:1px solid #2e2e2e;border-radius:16px;
-            padding:32px 36px;font-family:Inter,sans-serif;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-                <div>
-                    <div style="font-size:1.1rem;font-weight:700;letter-spacing:4px;color:#fff;">AXONE</div>
-                    <div style="font-size:.65rem;letter-spacing:3px;color:#555;margin-top:2px;">FX SUITE</div>
-                </div>
-                <div style="font-size:.75rem;color:#555;" id="print-hora"></div>
-            </div>
-            <div style="border-top:1px solid #1e1e1e;padding-top:20px;margin-bottom:20px;">
-                <div style="font-size:.7rem;letter-spacing:.12em;color:#555;text-transform:uppercase;margin-bottom:8px;">USDT / BRL — Cotação de Venda</div>
-                <div style="font-size:3rem;font-weight:700;color:#fff;letter-spacing:-1px;" id="print-preco">—</div>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#555;padding-top:16px;border-top:1px solid #1a1a1a;">
-                <span>Mercado: <span style="color:#a0a0a0;" id="print-mercado">—</span></span>
-                <span>Válido por 30 segundos</span>
-            </div>
-        </div>
-
-        <!-- Gráfico TradingView — USDT/BRL ao vivo com velas -->
-        <div class="chart-card" style="padding:0;overflow:hidden;border-radius:12px;min-height:460px;">
-            <div id="tv-chart-container" style="width:100%;height:460px;"></div>
-        </div>
-
-        <!-- Modal compartilhar -->
-        <div id="modal-share" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;">
-            <div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:36px;max-width:500px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.7);">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                    <h3 style="font-size:1.1rem;color:#fff;">Compartilhar Tela de Câmbio</h3>
-                    <button onclick="fecharModal()" style="background:none;border:none;color:#666;font-size:1.2rem;cursor:pointer;padding:4px 8px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <p style="color:#a0a0a0;font-size:.88rem;margin-bottom:20px;line-height:1.6;">
-                    Envie este link para o cliente acompanhar a cotação ao vivo. Ele poderá ver o preço em tempo real, tirar print e enviar para travar o valor desejado.
-                </p>
-                <div style="background:#111;border:1px solid #2e2e2e;border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:20px;">
-                    <span id="link-cliente-url" style="font-size:.82rem;color:#a0a0a0;word-break:break-all;flex:1;">cotacao-cliente.html</span>
-                    <button onclick="copiarLink()" style="background:rgba(255,255,255,.06);border:1px solid #383838;color:#a0a0a0;padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;font-size:.8rem;font-weight:600;transition:.2s;">
-                        Copiar Link
-                    </button>
-                </div>
-                <button onclick="abrirPaginaCliente()" class="btn-primary" style="width:100%;padding:13px;display:flex;align-items:center;justify-content:center;gap:8px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    Abrir Prévia da Tela do Cliente
-                </button>
-            </div>
-        </div>
-
-    </section>
-
-
-    <!-- ═══════════════ OPERAÇÕES ═══════════════ -->
-    <section class="page-section" id="page-operacoes">
-        <div class="section-header">
-            <div>
-                <h1>Operações</h1>
-            </div>
-            <div class="header-actions" style="display:flex;gap:10px;">
-                <button class="btn-secondary" id="btn-exportar-op" style="font-size:.82rem;padding:8px 16px;">Exportar PDF</button>
-            </div>
-        </div>
-
-        <!-- Glossário de Status — elegante e discreto -->
-        <div class="status-glossary" id="status-glossary">
-            <button class="sg-toggle" onclick="toggleGlossary()" title="Ver legenda de status">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Status Legend
-            </button>
-            <div class="sg-panel" id="sg-panel" style="display:none;">
-                <div class="sg-title">Transaction Status</div>
-                <div class="sg-row">
-                    <span class="sg-dot" style="background:#4CAF50;"></span>
-                    <div>
-                        <span class="sg-term">Settled</span>
-                        <span class="sg-pt">Concluída</span>
-                        <span class="sg-desc">Operação totalmente liquidada — dinheiro e ativo entregues.</span>
-                    </div>
-                </div>
-                <div class="sg-row">
-                    <span class="sg-dot" style="background:#2196F3;"></span>
-                    <div>
-                        <span class="sg-term">Processing</span>
-                        <span class="sg-pt">Em Andamento</span>
-                        <span class="sg-desc">Operação em fila de execução ou aguardando rede.</span>
-                    </div>
-                </div>
-                <div class="sg-row">
-                    <span class="sg-dot" style="background:#ffc107;"></span>
-                    <div>
-                        <span class="sg-term">Payment Pending</span>
-                        <span class="sg-pt">Falta Pagar</span>
-                        <span class="sg-desc">Fluxo financeiro do cliente ainda não identificado.</span>
-                    </div>
-                </div>
-                <div class="sg-row">
-                    <span class="sg-dot" style="background:#ff9800;"></span>
-                    <div>
-                        <span class="sg-term">Asset Pending</span>
-                        <span class="sg-pt">Nós Devemos</span>
-                        <span class="sg-desc">Pagamento recebido — USDT ainda não liberado.</span>
-                    </div>
-                </div>
-                <div class="sg-row">
-                    <span class="sg-dot" style="background:#ff5555;"></span>
-                    <div>
-                        <span class="sg-term">Voided</span>
-                        <span class="sg-pt">Cancelada</span>
-                        <span class="sg-desc">Transação anulada ou invalidada.</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Cards resumo -->
-        <div class="cards-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
-            <div class="card" style="border-color:rgba(33,150,243,.3);">
-                <h3>Saldo Disponível</h3>
-                <div class="value" style="color:#2196F3;" id="op-card-saldo">0,00 USDT</div>
-                <div class="subtitle">USDT em estoque para vender</div>
-            </div>
-            <div class="card highlight">
-                <h3>Lucro Total</h3>
-                <div class="value" id="op-card-lucro">R$ 0,00</div>
-                <div class="subtitle">Spread acumulado</div>
-            </div>
-            <div class="card">
-                <h3>Volume USDT</h3>
-                <div class="value" id="op-card-volume">0,00 USDT</div>
-                <div class="subtitle">Total negociado</div>
-            </div>
-            <div class="card">
-                <h3>Spread Médio</h3>
-                <div class="value" id="op-card-spread">R$ 0,0000</div>
-                <div class="subtitle">Por USDT negociado</div>
-            </div>
-        </div>
-
-        <!-- Tabela estilo Excel -->
-        <div class="table-card" style="margin-top:24px;">
-            <div class="table-responsive" id="drag-operacoes">
-                <table id="tabela-op-excel">
-                    <thead>
-                        <tr>
-                            <th style="width:110px;text-align:left;">Data</th>
-                            <th style="width:150px;text-align:left;">Status</th>
-                            <th style="width:150px;text-align:left;">Cliente</th>
-                            <th style="width:130px;text-align:right;padding-right:14px;">Valor USDT</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Compra</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Cot. Venda</th>
-                            <th style="width:140px;text-align:right;padding-right:14px;">Total Compra</th>
-                            <th style="width:130px;text-align:right;padding-right:14px;">Total Venda</th>
-                            <th style="width:120px;text-align:right;padding-right:14px;">Lucro</th>
-                            <th style="width:70px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-operacoes">
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="10" style="padding:10px 12px;">
-                                <button class="btn-secondary" id="btn-nova-linha-op" style="font-size:.82rem;padding:7px 18px;display:flex;align-items:center;gap:6px;">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                    Nova Linha
-                                </button>
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    </section>
-
-
-</div><!-- /main-content -->
-
-<div id="toast"></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="script.js"></script>
 </body>
-</html>
+</html>`);
+    w.document.close();
+}
+
+// ── Modal compartilhar ────────────────────────────────────────
+document.getElementById('btn-abrir-share').addEventListener('click', () => {
+    const url = window.location.href.replace(/[^/]*$/, '') + 'cotacao-cliente.html';
+    document.getElementById('link-cliente-url').textContent = url;
+    const modal = document.getElementById('modal-share');
+    modal.style.display = 'flex';
+});
+
+function fecharModal() {
+    document.getElementById('modal-share').style.display = 'none';
+}
+
+function copiarLink() {
+    const url = document.getElementById('link-cliente-url').textContent;
+    navigator.clipboard.writeText(url).then(() => toast('Link copiado com sucesso!')).catch(() => toast('Erro ao copiar link.', 'error'));
+}
+
+function abrirPaginaCliente() {
+    const spread = document.getElementById('calc-spread-input')?.value || '0';
+    const url    = `cotacao-cliente.html?spread=${encodeURIComponent(spread)}`;
+    window.open(url, '_blank');
+    fecharModal();
+}
+
+// Fechar modal clicando fora
+document.getElementById('modal-share').addEventListener('click', function(e) {
+    if (e.target === this) fecharModal();
+});
+
+// ── UTIL: DRAG TO SCROLL ────────────────────────────────────
+function dragScroll(el) {
+    if (!el) return;
+    let down=false, sx, sl;
+    el.addEventListener('mousedown', e=>{ down=true; sx=e.pageX-el.offsetLeft; sl=el.scrollLeft; });
+    el.addEventListener('mouseleave',  ()=>{ down=false; });
+    el.addEventListener('mouseup',     ()=>{ down=false; });
+    el.addEventListener('mousemove',   e=>{
+        if(!down) return; e.preventDefault();
+        el.scrollLeft = sl - ((e.pageX-el.offsetLeft - sx)*1.5);
+    });
+}
